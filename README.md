@@ -1,4 +1,4 @@
 PicardSpace
 ===========
 
-Picard SAM tools conversion website for BaseSpace
+A website that runs Picard tools for BaseSpace.
