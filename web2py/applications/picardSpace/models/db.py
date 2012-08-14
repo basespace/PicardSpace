@@ -81,7 +81,8 @@ use_janrain(auth,filename='private/janrain.key')
 
 
 # TODO move to separate model?
-import urllib2
+#import urllib2
+from urllib2 import Request, urlopen, URLError, HTTPError
 from urlparse import urlparse
 import os.path
 from subprocess import Popen, PIPE
@@ -105,6 +106,7 @@ db.define_table('download_queue',
     
 db.define_table('analysis_queue',
     Field('status'),
+    Field('message'),
     Field('bs_file_id', db.bs_file))
     
     
@@ -116,7 +118,6 @@ class AnalysisInputFile:
         """
         """
         self.bs_file_id = bs_file_id
-        self.output_files = []
         
     
     def download_and_analyze(self):
@@ -147,9 +148,9 @@ class AnalysisInputFile:
         Download a file from BaseSpace
         """    
         full_url = url + "?access_token=" + access_token    
-        req = urllib2.Request(full_url)
+        req = Request(full_url)
         try:
-            resp = urllib2.urlopen(req)
+            resp = urlopen(req)
         except URLerror, e:
             message = e.reason            
             # TODO how to handle errors? add msg to db?
@@ -177,6 +178,28 @@ class AnalysisInputFile:
             return(True)
 
 
+class AnalysisFeedback:
+    """
+    Records status and error messages of an Analysis
+    """
+    def __init__(self, status, message):
+        """
+        """
+        self.status = status # TODO allow only 'complete', 'error', ?
+        self.message = message
+
+
+class Analysis:
+    """
+    Class to run an Analysis and write-back file results to BaseSpace
+    """
+    def __init__(self, bs_file_id):
+        """
+        """
+        self.bs_file_id = bs_file_id
+        self.output_files = []
+
+
     def run_analysis_and_writeback(self):
         """
         Run picard analysis and writeback output files to BaseSpace
@@ -187,34 +210,33 @@ class AnalysisInputFile:
         
         local_path = file_row.local_path
         project_num = als_row.project_num
-        analysis_name = als_row.analysis_name
+        orig_analysis_name = als_row.analysis_name
         access_token = als_row.access_token
         
         # run picard
         retval = self._run_picard(local_path=local_path)
+        if(retval):
+            status="complete"
+            message=""
+        else:
+            status="error"
+            message="Picard analysis failed -- see stderr.txt file for more information."
+       
+        # create new Analysis in BaseSpace for writing back analysis output files
+        # TODO allow user to name analysis?
+        new_analysis_name = "test writeback"
+        ca = self._create_analysis(access_token=access_token,
+            project_num=project_num, analysis_name=new_analysis_name)
         
         # write back picard output files
-        test1 = self._writeback_output_files(access_token=access_token,
-            project_num=project_num, analysis_name=analysis_name)
+        #if (ca):
         
-        
-        return retval
+        if(not ca):
+            status="error"
+            message+=" Creating new Analysis in BaseSpace failed."
+            
+        return AnalysisFeedback(status, message)
 
-    def _writeback_output_files(self, access_token, project_num, analysis_name):
-        """
-        """
-        # TODO TODO TODO
-        url = 'https://api.cloud-endor.illumina.com/v1pre2/projects/' + project_num + 'analyses'               
-        args = 'Name=' + analysis_name +', Description=' + project_num # req for POST
-        headers = {}
-        headers['x-access-token'] = access_token
-        req = urllib2.Request(url,args, headers)
-        resp = urllib2.urlopen(req)
-        
-        #resp_data = json.loads(resp.read())
-        #if 'access_token' in resp_data:
-        
-        
         
     def _run_picard(self, local_path):    
         """
@@ -222,7 +244,11 @@ class AnalysisInputFile:
         """                
         # assemble picard command and run it
         output_file = local_path + ".alignment_metrics.txt"
-        command = ["java", "-jar", "applications/picardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", "INPUT=" + local_path, "OUTPUT=" + output_file, "REFERENCE_SEQUENCE=applications/picardSpace/private/genome.fa"]
+        command = ["java", "-jar", 
+            "applications/picardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", 
+            "INPUT=" + local_path, 
+            "OUTPUT=" + output_file, 
+            "REFERENCE_SEQUENCE=applications/picardSpace/private/genome.fa"]
         p = Popen(command, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate()
         
@@ -252,3 +278,31 @@ class AnalysisInputFile:
             return(True)
         else:
             return(False)
+
+
+    def _create_analysis(self, access_token, project_num, analysis_name):
+        """
+        """
+        # create a new analysis in a BaseSpace project
+        url = 'https://api.cloud-endor.illumina.com/v1pre2/projects/' + project_num + 'analyses'               
+        args = 'Name=' + analysis_name +', Description=' + project_num
+        headers = {}
+        headers['x-access-token'] = access_token
+        req = Request(url,args, headers)
+        try:
+            resp = urlopen(req)
+        except HTTPError, e:
+            # TODO where to store and display these errors?
+            print 'The server couldn\'t fulfill the request.'
+            print 'Error code: ', e.code
+            return(False)
+        except URLError, e:
+            print 'We failed to reach a server.'
+            print 'Reason: ', e.reason
+            return(False)
+        else:
+            # server responsed with JSON with details of new analysis
+            #resp_url = resp.geturl()    
+            #resp_hdr = resp.info()
+            resp_data = json.loads(resp.read())
+            return(True)
