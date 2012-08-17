@@ -86,13 +86,16 @@ from urllib2 import Request, urlopen, URLError, HTTPError
 from urlparse import urlparse
 import os.path
 from subprocess import Popen, PIPE
+from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
+
+
 
 db.define_table('analysis',
-    Field('action_id'),
     Field('access_token'),
-    Field('analysis_name'), # of original BS analysis
+    Field('analysis_name'),
     Field('analysis_num'),
-    Field('project_num'))
+    Field('project_num'),
+    Field('app_action_num'))
 
 db.define_table('bs_file',
     Field('analysis_id', db.analysis),
@@ -109,6 +112,11 @@ db.define_table('analysis_queue',
     Field('message'),
     Field('bs_file_id', db.bs_file))
     
+    
+# TODO rename these
+server          = 'https://api.cloud-endor.illumina.com/'
+version         = 'v1pre2'
+
     
 class AnalysisInputFile:
     """
@@ -129,13 +137,14 @@ class AnalysisInputFile:
         als_row = db(db.analysis.id==file_row.analysis_id).select().first()
 
         # set local_path location and url for downloading
-        local_path="applications/picardSpace/private/downloads/" + als_row.action_id + "/" + file_row.file_name
-        url='http://api.cloud-endor.illumina.com/v1pre2/files/' + file_row.file_num + '/content'
+        local_path="applications/picardSpace/private/downloads/" + als_row.app_action_num + "/"        
         access_token=als_row.access_token
+        file_num = file_row.file_num
 
         # download file, and if successful queue the file for analysis
-        if (self._download(url, access_token, local_path)):
-            file_row.update_record(local_path=local_path)
+        local_file = self._download_file(file_num=file_num, access_token=access_token, local_path=local_path)
+        if (local_file):            
+            file_row.update_record(local_path=local_file)
             db.commit()
             db.analysis_queue.insert(status='pending', bs_file_id=self.bs_file_id)
             return(True)
@@ -143,39 +152,34 @@ class AnalysisInputFile:
             return(False)
     
 
-    def _download(self, url, access_token, local_path):
+    def _download_file(self, file_num, access_token, local_path):
         """
         Download a file from BaseSpace
-        """    
-        full_url = url + "?access_token=" + access_token    
-        req = Request(full_url)
-        try:
-            resp = urlopen(req)
-        except URLerror, e:
-            message = e.reason            
-            # TODO how to handle errors? add msg to db?
-            return None
-        
-        aws_url = resp.geturl()    
-        hdr = resp.info()    
-        content = resp.read()
-            
+        """            
+        # get file info from BaseSpace
+        myAPI = BaseSpaceAPI(AccessToken=access_token,apiServer= server + version)
+        f = myAPI.getFileById(file_num)
+                        
         # create local_path dir if it doesn't exist   
-        local_dir = os.path.dirname(local_path)     
-        if not os.path.exists(local_dir):
-            os.makedirs(local_dir)
+        if not os.path.exists(local_path):
+            os.makedirs(local_path)
+
+        # BUG for Morten - don't require trailing slash on local path
+        # TODO add error checking - Morten which exceptions should I be checking for?
+        f.downloadFile(myAPI,local_path)
+        return(local_path + f.Name)
         
         # write downloaded data to new file
-        try:
-            f = open(local_path, "w")
-        except IOError as e:
-            # TODO how to record error msg for user?
-            msg = "I/O error({0}): {1}".format(e.errno, e.strerr)
-            return(False)
-        else:
-            f.write(content)
-            f.close()
-            return(True)
+#        try:
+#            f = open(local_path, "w")
+#        except IOError as e:
+#            # TODO how to record error msg for user?
+#            msg = "I/O error({0}): {1}".format(e.errno, e.strerr)
+#            return(False)
+#        else:
+#            f.write(content)
+#            f.close()
+#            return(True)
 
 
 class AnalysisFeedback:
@@ -189,59 +193,77 @@ class AnalysisFeedback:
         self.message = message
 
 
+class File:
+    """
+    A File in BaseSpace
+    """
+    def __init__(self, analysis_id, file_num, file_name, local_path):        
+        self.analysis_id = analysis_id
+        self.file_num = file_num
+        self.file_name = file_name
+        self.local_path = local_path
+
+
 class Analysis:
     """
-    Class to run an Analysis and write-back file results to BaseSpace
+    An Analysis in BaseSpace
     """
-    def __init__(self, bs_file_id):
+    def __init__(self, access_token, project_num, analysis_name=None, analysis_num=None, app_action_num=None):
         """
         """
-        self.bs_file_id = bs_file_id
-        self.output_files = []
-
-
-    def run_analysis_and_writeback(self):
-        """
-        Run picard analysis and writeback output files to BaseSpace
-        """        
-        # get file and analysis info from database
-        file_row = db(db.bs_file.id==self.bs_file_id).select().first()
-        als_row = db(db.analysis.id==file_row.analysis_id).select().first()
+        self.access_token = access_token
+        self.project_num = project_num
+        self.analysis_name = analysis_name
+        self.analysis_num = analysis_num
+        self.app_action_num = app_action_num
         
-        local_path = file_row.local_path
-        project_num = als_row.project_num
-        orig_analysis_name = als_row.analysis_name
-        access_token = als_row.access_token
+        self.output_files = []
+        #TODO declare or initialize these here?
+        #self.myAPI = ""
+        #self.analysis = ""        
+
+    def run_analysis_and_writeback(self, input_file):
+        """
+        Create an analysis in BaseSpace, run picard on the provided file, and writeback output files to BaseSpace
+        """                
+        # create new analysis in BaseSpace (for writing-back output files)
+        # TODO allow user to name analysis?
+        new_analysis_name = "test writeback"
+        new_analysis_description = "testing the writeback"
+        self._create_analysis(name=new_analysis_name,
+            description=new_analysis_description)        
         
         # run picard
-        retval = self._run_picard(local_path=local_path)
-        if(retval):
+        if(self._run_picard(input_file=input_file)):
             status="complete"
             message=""
         else:
             status="error"
             message="Picard analysis failed -- see stderr.txt file for more information."
        
-        # create new Analysis in BaseSpace for writing back analysis output files
-        # TODO allow user to name analysis?
-        new_analysis_name = "test writeback"
-        ca = self._create_analysis(access_token=access_token,
-            project_num=project_num, analysis_name=new_analysis_name)
-        
-        # write back picard output files
-        #if (ca):
-        
-        if(not ca):
+        # write-back analysis output files to BaseSpace
+        if(not self._writeback_analysis_files()):
             status="error"
             message+=" Creating new Analysis in BaseSpace failed."
             
         return AnalysisFeedback(status, message)
 
+
+    def _create_analysis(self, name, description):
+        """
+        Create a new analysis in BaseSpace with the provided name and description
+        """
+        self.myAPI = BaseSpaceAPI(AccessToken=self.access_token, apiServer=server + version)
+        project = self.myAPI.getProjectById(self.project_num)
+        self.analysis = project.createAnalysis(self.myAPI, name, description)
+
         
-    def _run_picard(self, local_path):    
+    def _run_picard(self, input_file):    
         """
         Run picard's CollectAlignmentSummaryMetics on a BAM file       
         """                
+        local_path = input_file.local_path
+        
         # assemble picard command and run it
         output_file = local_path + ".alignment_metrics.txt"
         command = ["java", "-jar", 
@@ -277,32 +299,17 @@ class Analysis:
         if (p.returncode == 0):
             return(True)
         else:
-            return(False)
+            return(False)    
 
 
-    def _create_analysis(self, access_token, project_num, analysis_name):
+    def _writeback_analysis_files(self):
         """
+        Create a new Analysis in the provided Project and writeback all files in the local path to it
         """
-        # create a new analysis in a BaseSpace project
-        url = 'https://api.cloud-endor.illumina.com/v1pre2/projects/' + project_num + 'analyses'               
-        args = 'Name=' + analysis_name +', Description=' + project_num
-        headers = {}
-        headers['x-access-token'] = access_token
-        req = Request(url,args, headers)
-        try:
-            resp = urlopen(req)
-        except HTTPError, e:
-            # TODO where to store and display these errors?
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            return(False)
-        except URLError, e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
-            return(False)
-        else:
-            # server responsed with JSON with details of new analysis
-            #resp_url = resp.geturl()    
-            #resp_hdr = resp.info()
-            resp_data = json.loads(resp.read())
-            return(True)
+        # TODO add correct dir name to write to        
+        for f in self.output_files:                               
+            self.analysis.uploadFile(self.myAPI, f, os.path.basename(f), '', 'text/plain')
+
+        self.analysis.setStatus(self.myAPI,'completed','Thats all folks')
+        
+        return(True)

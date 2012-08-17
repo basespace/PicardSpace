@@ -4,7 +4,6 @@ while True:
 
         als_file = AnalysisInputFile(row.bs_file_id)
         if als_file.download_and_analyze():
-        #if AnalysisInputFile.download_and_analyze(bs_file_id=row.bs_file_id):
             row.update_record(status='complete')
         else:
             row.update_record(status='failed')
