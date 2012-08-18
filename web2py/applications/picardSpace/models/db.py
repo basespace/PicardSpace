@@ -89,6 +89,13 @@ from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 
 
+#TODO assumes a single file is to be analyzed
+db.define_table('app_session',
+    Field('app_action_num'),
+    Field('project_num'),
+    Field('analysis_num'),
+    Field('file_num'),
+    Field('access_token'))
 
 db.define_table('analysis',
     Field('access_token'),
@@ -98,7 +105,8 @@ db.define_table('analysis',
     Field('app_action_num'))
 
 db.define_table('bs_file',
-    Field('analysis_id', db.analysis),
+#    Field('analysis_id', db.analysis),
+    Field('app_session_id', db.app_session),
     Field('file_num'),
     Field('file_name'),
     Field('local_path'))
@@ -134,11 +142,12 @@ class AnalysisInputFile:
         """        
         # get file and analysis info from database
         file_row = db(db.bs_file.id==self.bs_file_id).select().first()
-        als_row = db(db.analysis.id==file_row.analysis_id).select().first()
+        #als_row = db(db.analysis.id==file_row.analysis_id).select().first()
+        app_ssn_row = db(db.app_session.id==file_row.app_session_id).select().first()
 
         # set local_path location and url for downloading
-        local_path="applications/picardSpace/private/downloads/" + als_row.app_action_num + "/"        
-        access_token=als_row.access_token
+        local_path="applications/picardSpace/private/downloads/" + app_ssn_row.app_action_num + "/"        
+        access_token=app_ssn_row.access_token
         file_num = file_row.file_num
 
         # download file, and if successful queue the file for analysis
@@ -165,7 +174,6 @@ class AnalysisInputFile:
             os.makedirs(local_path)
 
         # BUG for Morten - don't require trailing slash on local path
-        # TODO add error checking - Morten which exceptions should I be checking for?
         f.downloadFile(myAPI,local_path)
         return(local_path + f.Name)
         
@@ -197,8 +205,9 @@ class File:
     """
     A File in BaseSpace
     """
-    def __init__(self, analysis_id, file_num, file_name, local_path):        
-        self.analysis_id = analysis_id
+    def __init__(self, app_session_id, file_num, file_name, local_path):              
+#        self.analysis_id = analysis_id
+        self.app_session_id = app_session_id
         self.file_num = file_num
         self.file_name = file_name
         self.local_path = local_path
