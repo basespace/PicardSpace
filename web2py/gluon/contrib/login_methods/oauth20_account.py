@@ -16,6 +16,8 @@ import cgi
 from urllib2 import urlopen
 import urllib2
 from urllib import urlencode
+# TODO modifying here
+import json
 
 class OAuthAccount(object):
     """
@@ -101,7 +103,10 @@ class OAuthAccount(object):
             data = dict(client_id=self.client_id,
                         client_secret=self.client_secret,
                         redirect_uri=self.session.redirect_uri,
-                        response_type='token', code=self.session.code)
+                        response_type='token', code=self.session.code,
+                        grant_type='authorization_code')
+                        # TODO added grant_type
+                        #response_type='token', code=self.session.code)
 
 
             if self.args:
@@ -117,16 +122,25 @@ class OAuthAccount(object):
 
             if open_url:
                 try:
-                    tokendata = cgi.parse_qs(open_url.read())
-                    self.session.token = dict([(k,v[-1]) for k,v in tokendata.items()])
+                    # TODO modifying here- BS uses json, old code used query str
+                    tokendata = json.loads(open_url.read())
+                    self.session.token = tokendata
+                    #test2 = open_url.read()
+                    #tokendata = cgi.parse_qs(open_url.read())
+                    #self.session.token = dict([(k,v[-1]) for k,v in tokendata.items()])
+
                     # set expiration absolute time try to avoid broken
                     # implementations where "expires_in" becomes "expires"
                     if self.session.token.has_key('expires_in'):
                         exps = 'expires_in'
                     else:
                         exps = 'expires'
-                    self.session.token['expires'] = int(self.session.token[exps]) + \
-                        time.time()
+# TODO editing expires since BaseSpace doesn't return this
+#                    self.session.token['expires'] = int(self.session.token[exps]) + \
+#                        time.time()
+                    self.session.token['expires'] = 0
+
+
                 finally:
                     opener.close()
                 return self.session.token['access_token']

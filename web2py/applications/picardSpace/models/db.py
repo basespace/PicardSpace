@@ -43,44 +43,95 @@ from gluon.tools import Auth, Crud, Service, PluginManager, prettydate
 auth = Auth(db, hmac_key=Auth.get_or_create_key())
 crud, service, plugins = Crud(db), Service(), PluginManager()
 
+auth_table = db.define_table(
+           auth.settings.table_user_name,
+           Field('first_name', length=128, default=""),
+           Field('last_name', length=128, default=""),
+           Field('username', length=128, default=""),   #, unique=True),
+           Field('password', 'password', length=256, readable=False, label='Password'),
+           Field('registration_key', length=128, default= "", writable=False, readable=False))
+
+auth_table.username.requires = IS_NOT_IN_DB(db, auth_table.username)
+
 ## create all tables needed by auth if not custom tables
 auth.define_tables()
 
+# TODO disable auth action not used
+#auth.settings.actions_disabled.append('register')
+#auth.settings.allows_basic_login = False
+
 ## configure email
-mail=auth.settings.mailer
-mail.settings.server = 'logging' or 'smtp.gmail.com:587'
-mail.settings.sender = 'you@gmail.com'
-mail.settings.login = 'username:password'
+#mail=auth.settings.mailer
+#mail.settings.server = 'logging' or 'smtp.gmail.com:587'
+#mail.settings.sender = 'you@gmail.com'
+#mail.settings.login = 'username:password'
 
 ## configure auth policy
 auth.settings.registration_requires_verification = False
 auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
-## if you need to use OpenID, Facebook, MySpace, Twitter, Linkedin, etc.
-## register with janrain.com, write your domain:api_key in private/janrain.key
-from gluon.contrib.login_methods.rpx_account import use_janrain
-use_janrain(auth,filename='private/janrain.key')
 
-#########################################################################
-## Define your tables below (or better in another model file) for example
-##
-## >>> db.define_table('mytable',Field('myfield','string'))
-##
-## Fields can be 'string','text','password','integer','double','boolean'
-##       'date','time','datetime','blob','upload', 'reference TABLENAME'
-## There is an implicit 'id integer autoincrement' field
-## Consult manual for more options, validators, etc.
-##
-## More API examples for controllers:
-##
-## >>> db.mytable.insert(myfield='value')
-## >>> rows=db(db.mytable.myfield=='value').select(db.mytable.ALL)
-## >>> for row in rows: print row.id, row.myfield
-#########################################################################
+#basespaceuser1 aTest-1 (app)
+client_id     = 'f4e812672009413d809b7caa31aae9b4'
+client_secret = 'a23bee7515a54142937d9eb56b7d6659'
+redirect_uri = 'http://localhost:8000/picardSpace/default/startanalysis'
+
+# import OAuth2 account for authentication
+from gluon.contrib.login_methods.oauth20_account import OAuthAccount
 
 
-# TODO move to separate model?
+class BaseSpaceAccount(OAuthAccount):
+    """
+    OAuth2 implementation for BaseSpace
+    """
+    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'
+    baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
+    version       = 'v1pre2/'
+    token_url      = baseSpaceUrl + version + 'oauthv2/token/'
+    
+    def __init__(self):
+        OAuthAccount.__init__(self, 
+            globals(),   # web2py keyword
+            client_id, 
+            client_secret,
+            self.auth_url,
+            self.token_url,
+            #redirect_uri=redirect_uri,  # redirect uri of the BaseSpace app -- reqd by BaseSpace API
+            state='user_login')
+            # TODO use scope parameter here?
+            
+    def get_user(self):
+        """
+        Returns the user using the BaseSpace API            
+        """
+        if not self.accessToken():
+            return None
+
+        # TODO need to check if myAPI isn't yet defined?
+        #if not self.myAPI:
+        self.myAPI = BaseSpaceAPI(AccessToken=self.accessToken(),apiServer=self.baseSpaceUrl + self.version)
+        
+        user = None
+        try:
+            user = self.myAPI.getUserById("current")
+        except:
+            self.session.token = None
+            self.myAPI = None
+
+        if user:
+            return dict(first_name = user.Name,
+                        last_name = user.Email,
+                        username = user.Id)
+
+# TODO subclass accessToken due to diffs in BaseSpace OAuth2 vs web2py's
+#    def accessToken(self):
+            
+auth.settings.login_form=BaseSpaceAccount()
+
+
+
+# TODO move tables to separate model?
 #import urllib2
 from urllib2 import Request, urlopen, URLError, HTTPError
 from urlparse import urlparse
@@ -95,10 +146,10 @@ db.define_table('app_session',
     Field('project_num'),
     Field('analysis_num'),
     Field('file_num'),
-    Field('access_token'))
+    Field('user_id'), db.auth_user) 
 
 db.define_table('analysis',
-    Field('access_token'),
+    Field('access_token'), # TODO probably need to remove this -- replace with user_id?
     Field('analysis_name'),
     Field('analysis_num'),
     Field('project_num'),
@@ -121,18 +172,14 @@ db.define_table('analysis_queue',
     Field('bs_file_id', db.bs_file))
     
     
-# TODO rename these
 server          = 'https://api.cloud-endor.illumina.com/'
 version         = 'v1pre2'
-
     
 class AnalysisInputFile:
     """
     Class to download, analyze, and write-back results of a single file    
     """
-    def __init__(self, bs_file_id):
-        """
-        """
+    def __init__(self, bs_file_id):                
         self.bs_file_id = bs_file_id
         
     
@@ -142,12 +189,12 @@ class AnalysisInputFile:
         """        
         # get file and analysis info from database
         file_row = db(db.bs_file.id==self.bs_file_id).select().first()
-        #als_row = db(db.analysis.id==file_row.analysis_id).select().first()
         app_ssn_row = db(db.app_session.id==file_row.app_session_id).select().first()
+        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()
 
         # set local_path location and url for downloading
         local_path="applications/picardSpace/private/downloads/" + app_ssn_row.app_action_num + "/"        
-        access_token=app_ssn_row.access_token
+        access_token=user_row.password
         file_num = file_row.file_num
 
         # download file, and if successful queue the file for analysis
@@ -173,30 +220,21 @@ class AnalysisInputFile:
         if not os.path.exists(local_path):
             os.makedirs(local_path)
 
-        # BUG for Morten - don't require trailing slash on local path
-        f.downloadFile(myAPI,local_path)
+        # write downloaded data to new file
+        # Bug for Morten? - don't require trailing slash on local path
+        try:
+            f.downloadFile(myAPI,local_path)
+        except IOError as e:
+            # TODO how to handle this error?
+            message = "Error in downloading file from BaseSpace"                        
         return(local_path + f.Name)
         
-        # write downloaded data to new file
-#        try:
-#            f = open(local_path, "w")
-#        except IOError as e:
-#            # TODO how to record error msg for user?
-#            msg = "I/O error({0}): {1}".format(e.errno, e.strerr)
-#            return(False)
-#        else:
-#            f.write(content)
-#            f.close()
-#            return(True)
-
 
 class AnalysisFeedback:
     """
     Records status and error messages of an Analysis
     """
-    def __init__(self, status, message):
-        """
-        """
+    def __init__(self, status, message):               
         self.status = status # TODO allow only 'complete', 'error', ?
         self.message = message
 
@@ -218,8 +256,7 @@ class Analysis:
     An Analysis in BaseSpace
     """
     def __init__(self, access_token, project_num, analysis_name=None, analysis_num=None, app_action_num=None):
-        """
-        """
+                
         self.access_token = access_token
         self.project_num = project_num
         self.analysis_name = analysis_name
