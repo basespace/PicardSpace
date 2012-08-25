@@ -56,9 +56,18 @@ auth_table.username.requires = IS_NOT_IN_DB(db, auth_table.username)
 ## create all tables needed by auth if not custom tables
 auth.define_tables()
 
-# TODO disable auth action not used
-#auth.settings.actions_disabled.append('register')
-#auth.settings.allows_basic_login = False
+# disable auth actions not wanted
+auth.settings.actions_disabled.append('register')
+auth.settings.actions_disabled.append('profile')
+auth.settings.actions_disabled.append('change_password')
+auth.settings.actions_disabled.append('verify_email')
+auth.settings.actions_disabled.append('retrieve_username')
+auth.settings.actions_disabled.append('request_reset_password')
+auth.settings.actions_disabled.append('impersonate')
+auth.settings.actions_disabled.append('groups')
+
+# set page that user sees after logging in
+auth.settings.login_next = URL('user_now_logged_in')
 
 ## configure email
 #mail=auth.settings.mailer

@@ -6,6 +6,12 @@
 {{pass}}
 <br/>
 
+Analyze this BAM file?
+Project num is {{=project_num}}
+Analysis num is {{=analysis_num}}
+File num is {{=file_num}}
+{{=A(T("Analyze!"), _href=URL('get_auth_code'))}}
+
 {{block right_sidebar}}
 {{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='button',
      _style='margin-top: 1em;')}}

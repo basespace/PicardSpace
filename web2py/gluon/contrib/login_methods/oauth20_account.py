@@ -106,7 +106,6 @@ class OAuthAccount(object):
                         response_type='token', code=self.session.code,
                         grant_type='authorization_code')
                         # TODO added grant_type
-                        #response_type='token', code=self.session.code)
 
 
             if self.args:
@@ -206,6 +205,10 @@ class OAuthAccount(object):
                 data = dict(redirect_uri=self.session.redirect_uri,
                                   response_type='code',
                                   client_id=self.client_id)
+                # TODO adding scope for project browse in addtn to login
+                if self.session.scope:
+                    data['scope'] = self.session.scope
+
                 if self.args:
                     data.update(self.args)
                 auth_request_url = self.auth_url + "?" +urlencode(data)

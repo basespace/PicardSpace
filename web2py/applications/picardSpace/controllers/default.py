@@ -27,56 +27,88 @@ def index():
     A user just launched the PicardSpace app
     Retrieve the app_action_num to identify items that the users selected to analyze
     """
-    response.flash = "Welcome to PicardSpace!"    
+    # display welcome 'flash' dialog and disable menu navigation
+    # response.flash = "Welcome to PicardSpace!"    
+    response.menu = False
+    response.title = "PicardSpace"
+    response.subtitle = "Home Page"
+
+    # clear existing session vars 
+    # TODO do this here? elsewhere too?
+    session.app_action_num = None
+    session.project_num = None
+    session.scope = None
     
     # record app action number if provided
     if (request.get_vars.actionuri):
         actionuri = request.get_vars.actionuri
         app_action_num = os.path.basename(actionuri)
         session.app_action_num = app_action_num
+         
+        # exchange action num for items the user pre-selected in BaseSpace
+        bs_auth = BaseSpaceAuth(client_id,client_secret,baseSpaceUrl,version)
+        app_launch = bs_auth.getAppTrigger(app_action_num)  
+        app_inputs = app_launch.getLaunchType()
 
-    message = "Welcome to PicardSpace"
+        # TODO iterate over all inputs and assemble into master scope string?
+        proj = app_inputs[1][-1]
+        proj.getAccessStr(scope='write')
+        
+        # set session vars: project for picking items after login, scope for browse request on project at login
+        session.project_num = proj.Id
+        session.scope = proj.getAccessStr(scope='write')        
+
+    # TODO handle if a user is already logged into PicardSpace and just arrived from BaseSpace with an action_id
+   
+    message = "Welcome to PicardSpace! Please log in."
     if session.app_action_num:
         message += ". App action num is " + session.app_action_num
             
     return dict(message=T(message))
 
-
+@auth.requires_login()
 def user_now_logged_in():
     """
     """
-        # determine if the user pre-selected a sample/analysis/project to analyze
+    # determine if the user pre-selected a sample/analysis/project to analyze
     if (not session.app_action_num):
-    #if (not request.get_vars.actionuri):
-        # TODO - present user with choice of BaseSpace items
-        message = "No actionurl was found - which samples should I analyze??"
+        redirect(URL("view_results"))
     else:
         # An action_id was provided, now ask BaseSpace which item(s) the users selected
         #action = request.get_vars.action
         #actionuri = request.get_vars.actionuri
         #app_action_num = os.path.basename(actionuri)
         #return_uri = request.get_vars.return_uri
-        redirect(URL(trade_action_id_for_items, vars=dict(app_action_num=session.app_action_num)))
+        #redirect(URL(trade_action_id_for_items, vars=dict(app_action_num=session.app_action_num)))
+        redirect(URL(choose_analysis_inputs))
     return dict(message=T(message))
 
-def trade_action_id_for_items():
-    """
-    Given an app action id, exchange this via BaseSpace API for item names to analyze
-    """
-    app_action_num = request.vars.app_action_num
-    #return_uri = request.vars.return_id
-    
-    # exchange app_action_id for items the user pre-selected in BaseSpace
-    bs_auth = BaseSpaceAuth(client_id,client_secret,baseSpaceUrl,version)
-    app_launch = bs_auth.getAppTrigger(app_action_num)  
-    app_inputs = app_launch.getLaunchType()
 
-    # TODO iterate over all inputs and assemble into master scope string
-    proj = app_inputs[1][-1]
-    proj.getAccessStr(scope='write')
-    project_num = proj.Id
-    #scope = proj.getAccessStr(scope='write')
-   
+@auth.requires_login()
+def view_results():
+    """
+    Main page for logged-in users - shows list of past analyses and option to launch new analysis
+    """
+    response.menu = False
+    
+    message = ""
+    if request.get_vars.message:
+        message = request.get_vars.message
+        
+    message += "Launch Analysis -- or View Results -- TODO!"
+    return dict(message=T(message))
+    
+
+@auth.requires_login()
+def choose_analysis_inputs():
+    """
+    """
+    response.menu = False
+    
+    # TODO if session.project_num:
+    app_action_num = session.app_action_num
+    project_num = session.project_num
+    
     # Given an item name to analyze, get an authorization code (which we'll exchange for an auth token)         
     # TODO change these to session vars (instead of in db before user OKs data access?)
     analysis_num = 9995
@@ -84,6 +116,26 @@ def trade_action_id_for_items():
     file_num = 2351949
     #file_num = [ file_num ]
 
+    # TODO cheating here for now -- make these pass from view back to  get_auth_code()
+    session.analysis_num = analysis_num
+    session.file_num = file_num
+
+    return dict(project_num=T(str(project_num)),
+        analysis_num=T(str(analysis_num)),
+        file_num=T(str(file_num)))
+
+@auth.requires_login()
+def get_auth_code():
+    """
+    Given an app action id, exchange this via BaseSpace API for item names to analyze
+    """
+    app_action_num = session.app_action_num
+    # TODO these shouldn't be session vars
+    project_num = session.project_num
+    analysis_num = session.analysis_num
+    file_num = session.file_num
+
+    
     app_session_id = db.app_session.insert(app_action_num=app_action_num,
         project_num=project_num,
         analysis_num=analysis_num,
@@ -96,7 +148,7 @@ def trade_action_id_for_items():
     userUrl = bs_auth.getWebVerificationCode(scope,redirect_uri,state=app_action_num)
     redirect(userUrl)
 
-
+@auth.requires_login()
 def startanalysis():
     """
     Given an authorization code, exchange this for an authorization token
@@ -146,6 +198,9 @@ def startanalysis():
         
     # add file to download queue
     db.download_queue.insert(status='pending', bs_file_id = bs_file_id)
+
+    # TODO redirect user to view_results page -- with message that their analysis started
+    redirect(URL('view_results', vars=dict(message='Your Analysis is Started!')))
                               
     message = "welcome back from getting your auth token: " + access_token + " - now we're getting actual BS data!"
     return dict(message=T(message))
