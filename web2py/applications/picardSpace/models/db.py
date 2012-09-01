@@ -1,26 +1,10 @@
 # -*- coding: utf-8 -*-
 
-#########################################################################
-## This scaffolding model makes your app work on Google App Engine too
-## File is released under public domain and you can use without limitations
-#########################################################################
-
 ## if SSL/HTTPS is properly configured and you want all HTTP requests to
 ## be redirected to HTTPS, uncomment the line below:
 # request.requires_https()
 
-if not request.env.web2py_runtime_gae:
-    ## if NOT running on Google App Engine use SQLite or other DB
-    db = DAL('sqlite://storage.sqlite')
-else:
-    ## connect to Google BigTable (optional 'google:datastore://namespace')
-    db = DAL('google:datastore')
-    ## store sessions and tickets there
-    session.connect(request, response, db = db)
-    ## or store session in Memcache, Redis, etc.
-    ## from gluon.contrib.memdb import MEMDB
-    ## from google.appengine.api.memcache import Client
-    ## session.connect(request, response, db = MEMDB(Client()))
+db = DAL('sqlite://storage.sqlite')
 
 ## by default give a view/generic.extension to all actions from localhost
 ## none otherwise. a pattern can be 'controller/function.extension'
@@ -48,7 +32,8 @@ auth_table = db.define_table(
            Field('first_name', length=128, default=""),
            Field('last_name', length=128, default=""),
            Field('username', length=128, default=""),   #, unique=True),
-           Field('password', 'password', length=256, readable=False, label='Password'),
+           #Field('password', 'password', length=256, readable=False, label='Password'),
+           Field('access_token', length=128, default=""),
            Field('registration_key', length=128, default= "", writable=False, readable=False))
 
 auth_table.username.requires = IS_NOT_IN_DB(db, auth_table.username)
@@ -68,12 +53,6 @@ auth.settings.actions_disabled.append('groups')
 
 # set page that user sees after logging in
 auth.settings.login_next = URL('user_now_logged_in')
-
-## configure email
-#mail=auth.settings.mailer
-#mail.settings.server = 'logging' or 'smtp.gmail.com:587'
-#mail.settings.sender = 'you@gmail.com'
-#mail.settings.login = 'username:password'
 
 ## configure auth policy
 auth.settings.registration_requires_verification = False
@@ -149,95 +128,107 @@ from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 
 
-#TODO assumes a single file is to be analyzed
 db.define_table('app_session',
     Field('app_action_num'),
-    Field('project_num'),
-    Field('analysis_num'),
-    Field('file_num'),
+    Field('project_num'),          # the BaseSpace project to write-back results
+    Field('orig_analysis_num'),    # the old BaseSpace App Result that contained the file to be analyzed
+    Field('file_num'),             # the BaseSpace file that was analyzed
+    Field('new_app_result_id'),     # the newly created App Result
     Field('user_id'), db.auth_user) 
 
-db.define_table('analysis',
-    Field('access_token'), # TODO probably need to remove this -- replace with user_id?
+db.define_table('app_result',
+    Field('app_session_id', db.app_session),
     Field('analysis_name'),
     Field('analysis_num'),
     Field('project_num'),
-    Field('app_action_num'))
+    Field('description'),
+    Field('status'))
 
 db.define_table('bs_file',
-#    Field('analysis_id', db.analysis),
-    Field('app_session_id', db.app_session),
+    Field('app_result_id', db.app_result),
+    Field('app_session_id', db.app_session), # TODO should this be only on the app_result?
     Field('file_num'),
     Field('file_name'),
-    Field('local_path'))
+    Field('local_path'),
+    Field('io_type'))   # 'input' or 'output' from an analysis
 
 db.define_table('download_queue',
     Field('status'),
-    Field('bs_file_id', db.bs_file))
-    
+    Field('app_result_id', db.app_result))
+        
 db.define_table('analysis_queue',
     Field('status'),
     Field('message'),
-    Field('bs_file_id', db.bs_file))
-    
+    Field('app_result_id', db.app_result))
     
 server          = 'https://api.cloud-endor.illumina.com/'
 version         = 'v1pre2'
-    
-class AnalysisInputFile:
+
+
+class File:
     """
-    Class to download, analyze, and write-back results of a single file    
+    A File in BaseSpace
     """
-    def __init__(self, bs_file_id):                
+    def __init__(self, app_session_id, file_name, local_path, file_num=None, bs_file_id=None, app_result_id=None):              
+        self.app_session_id = app_session_id
+        self.file_name = file_name
+        self.local_path = local_path
+        self.file_num = file_num        
         self.bs_file_id = bs_file_id
-        
-    
-    def download_and_analyze(self):
+        self.app_result_id = app_result_id   # used for inputs to app results
+
+    def download_file(self, file_num, local_dir):
         """
-        Download file contents from BaseSpace and queue the file for analysis
-        """        
-        # get file and analysis info from database
-        file_row = db(db.bs_file.id==self.bs_file_id).select().first()
-        app_ssn_row = db(db.app_session.id==file_row.app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()
-
-        # set local_path location and url for downloading
-        local_path="applications/picardSpace/private/downloads/" + app_ssn_row.app_action_num + "/"        
-        access_token=user_row.password
-        file_num = file_row.file_num
-
-        # download file, and if successful queue the file for analysis
-        local_file = self._download_file(file_num=file_num, access_token=access_token, local_path=local_path)
-        if (local_file):            
-            file_row.update_record(local_path=local_file)
-            db.commit()
-            db.analysis_queue.insert(status='pending', bs_file_id=self.bs_file_id)
-            return(True)
-        else:
-            return(False)
-    
-
-    def _download_file(self, file_num, access_token, local_path):
-        """
-        Download a file from BaseSpace
-        """            
+        Download a file from BaseSpace inot the provided directory (created if doesn't exist)
+        """     
+        # get access token for app session's user so we can use API (can't just use current user since accessing from cron script)
+        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
+                        
         # get file info from BaseSpace
-        myAPI = BaseSpaceAPI(AccessToken=access_token,apiServer= server + version)
+        myAPI = BaseSpaceAPI(AccessToken=user_row.access_token,apiServer= server + version)
         f = myAPI.getFileById(file_num)
                         
         # create local_path dir if it doesn't exist   
-        if not os.path.exists(local_path):
-            os.makedirs(local_path)
+        if not os.path.exists(local_dir):
+            os.makedirs(local_dir)
 
         # write downloaded data to new file
         # Bug for Morten? - don't require trailing slash on local path
-        try:
-            f.downloadFile(myAPI,local_path)
-        except IOError as e:
-            # TODO how to handle this error?
-            message = "Error in downloading file from BaseSpace"                        
-        return(local_path + f.Name)
+        f.downloadFile(myAPI,local_dir)
+        return(local_dir + f.Name)
         
+    
+class AnalysisInputFile(File):
+    """
+    Class to download, analyze, and write-back results of a single file    
+    """
+    def download_and_analyze(self):
+        """
+        Download file contents from BaseSpace and queue the file for analysis
+        """             
+        # get file and analysis info from database        
+        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        
+        # set local_path location and url for downloading
+        # TODO remove hard-coded path
+        local_dir="applications/picardSpace/private/downloads/inputs/" + app_ssn_row.app_action_num + "/"        
+
+        # download file from BaseSpace
+        try:
+            local_file = self.download_file(file_num=self.file_num, local_dir=local_dir)
+        except IOError as e:
+            return(False)
+
+        # update file's local path
+        file_row = db(db.bs_file.id==self.bs_file_id).select().first()     
+        file_row.update_record(local_path=local_file)
+        db.commit()
+        
+        # add file to analysis queue
+        db.analysis_queue.insert(status='pending', app_result_id=self.app_result_id)
+        return(True)
+     
 
 class AnalysisFeedback:
     """
@@ -248,29 +239,18 @@ class AnalysisFeedback:
         self.message = message
 
 
-class File:
+class AppResult:
     """
-    A File in BaseSpace
+    An App Result in BaseSpace
     """
-    def __init__(self, app_session_id, file_num, file_name, local_path):              
-#        self.analysis_id = analysis_id
+    def __init__(self, app_result_id, app_session_id, project_num, status="new", analysis_name=None, analysis_num=None, description=None):
+        self.app_result_id = app_result_id 
         self.app_session_id = app_session_id
-        self.file_num = file_num
-        self.file_name = file_name
-        self.local_path = local_path
-
-
-class Analysis:
-    """
-    An Analysis in BaseSpace
-    """
-    def __init__(self, access_token, project_num, analysis_name=None, analysis_num=None, app_action_num=None):
-                
-        self.access_token = access_token
         self.project_num = project_num
         self.analysis_name = analysis_name
         self.analysis_num = analysis_num
-        self.app_action_num = app_action_num
+        self.description = description
+        self.status = status
         
         self.output_files = []
         #TODO declare or initialize these here?
@@ -281,74 +261,107 @@ class Analysis:
         """
         Create an analysis in BaseSpace, run picard on the provided file, and writeback output files to BaseSpace
         """                
-        # create new analysis in BaseSpace (for writing-back output files)
+        # create new analysis in BaseSpace (for writing back output files)
         # TODO allow user to name analysis?
-        new_analysis_name = "test writeback"
-        new_analysis_description = "testing the writeback"
-        self._create_analysis(name=new_analysis_name,
-            description=new_analysis_description)        
-        
+        self.analysis_name = "test writeback"
+        self.description = "testing the writeback"
+        self._create_analysis(name=self.analysis_name,
+            description=self.description)
+
+        # update db with status
+        self._update_status("running analysis")
+                
         # run picard
-        if(self._run_picard(input_file=input_file)):
-            status="complete"
-            message=""
-        else:
-            status="error"
+        if(not self._run_picard(input_file=input_file)):
+            self._update_status("analysis error")
             message="Picard analysis failed -- see stderr.txt file for more information."
+        else:
+            self._update_status("writing back")
+            message=""
        
-        # write-back analysis output files to BaseSpace
-        if(not self._writeback_analysis_files()):
-            status="error"
-            message+=" Creating new Analysis in BaseSpace failed."
+            # write-back analysis output files to BaseSpace
+            if(not self._writeback_analysis_files()):
+                self._update_status("analysis successful, but writeback error")
+                message+=" Creating new Analysis in BaseSpace failed."
             
-        return AnalysisFeedback(status, message)
+        return AnalysisFeedback(self.status, message)
+
+
+    def _update_status(self, status):
+        """ Update db with provided status """
+        self.status=status
+        ar_row = db(db.app_result.id==self.app_result_id).select().first()
+        ar_row.update_record(status=self.status)
+        db.commit()
 
 
     def _create_analysis(self, name, description):
         """
         Create a new analysis in BaseSpace with the provided name and description
         """
-        self.myAPI = BaseSpaceAPI(AccessToken=self.access_token, apiServer=server + version)
+        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()
+        access_token = user_row.access_token
+        
+        # create analysis and record the analysis number provided by BaseSpace
+        self.myAPI = BaseSpaceAPI(AccessToken=access_token, apiServer=server + version)
         project = self.myAPI.getProjectById(self.project_num)
         self.analysis = project.createAnalysis(self.myAPI, name, description)
-
+        self.analysis_num = self.analysis.Id
+        
         
     def _run_picard(self, input_file):    
         """
         Run picard's CollectAlignmentSummaryMetics on a BAM file       
         """                
-        local_path = input_file.local_path
+        input_path = input_file.local_path
         
         # assemble picard command and run it
-        output_file = local_path + ".alignment_metrics.txt"
+        (dirname, file_name) = os.path.split(input_path)
+        aln_met_name = file_name + ".AlignmentMetrics.txt"
+        output_path = os.path.join(dirname, aln_met_name)
+        
+        #output_file = local_path + ".alignment_metrics.txt"
         command = ["java", "-jar", 
             "applications/picardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", 
-            "INPUT=" + local_path, 
-            "OUTPUT=" + output_file, 
+            "INPUT=" + input_path, 
+            "OUTPUT=" + output_path, 
             "REFERENCE_SEQUENCE=applications/picardSpace/private/genome.fa"]
         p = Popen(command, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate()
         
         # add output file to writeback list
-        if (os.path.exists(output_file)):
-            self.output_files.append(output_file)
+        if (os.path.exists(output_path)):           
+            f = File(app_session_id=self.app_session_id,
+                file_name=aln_met_name,
+                local_path=output_path)
+            self.output_files.append(f)
         
         # write stdout and stderr to files for troubleshooting
         try:
-             stdout_name = local_path + ".stdout.txt"
-             stderr_name = local_path + ".stderr.txt"
-             F_STDOUT = open( stdout_name, "w")
-             F_STDERR = open( stderr_name, "w")
+             stdout_name = file_name + ".stdout.txt"
+             stderr_name = file_name + ".stderr.txt"
+             stdout_path = os.path.join(dirname, stdout_name)
+             stderr_path = os.path.join(dirname, stderr_name)
+             F_STDOUT = open( stdout_path, "w")
+             F_STDERR = open( stderr_path, "w")
         except IOError as e:
             # TODO how to record error msg for user?
-            msg = "I/O error({0}): {1}".format(e.errno, e.strerr)
+            msg = "I/O error({0}): {1}".format(e.errno, e)
+            return False
         else:                            
             F_STDOUT.write(stdout)
             F_STDERR.write(stderr)                
             F_STDOUT.close()
-            F_STDERR.close()        
-            self.output_files.append(stdout_name)
-            self.output_files.append(stderr_name)
+            F_STDERR.close()
+            f_stdout = File(app_session_id=self.app_session_id,
+                file_name=stdout_name,
+                local_path=stdout_path)        
+            f_stderr = File(app_session_id=self.app_session_id,
+                file_name=stderr_name,
+                local_path=stderr_path)        
+            self.output_files.append(f_stdout)
+            self.output_files.append(f_stderr)
         
         # TODO handle returncode=None, which means process is still running
         if (p.returncode == 0):
@@ -361,10 +374,23 @@ class Analysis:
         """
         Create a new Analysis in the provided Project and writeback all files in the local path to it
         """
-        # TODO add correct dir name to write to        
-        for f in self.output_files:                               
-            self.analysis.uploadFile(self.myAPI, f, os.path.basename(f), '', 'text/plain')
+        # TODO add correct dir name to write to
+        # instead of saving self.analysis, use myapi with getAnalysisById?        
+        try:
+            for f in self.output_files:
+                # upload file to BaseSpace                               
+                bs_file = self.analysis.uploadFile(self.myAPI, f.local_path, f.file_name, '', 'text/plain')
+                
+                # add file to local db
+                bs_file_id = db.bs_file.insert(app_session_id=f.app_session_id,
+                    file_num=bs_file.Id, 
+                    file_name=f.file_name, 
+                    local_path=f.local_path, 
+                    io_type="output")               
 
-        self.analysis.setStatus(self.myAPI,'completed','Thats all folks')
+            self.analysis.setStatus(self.myAPI,'complete','Thats all folks')
+        except:
+            # TODO capture error message? and separate upload files from setStatus error msgs
+            return(False)
         
         return(True)

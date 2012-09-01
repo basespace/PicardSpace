@@ -1,12 +1,31 @@
 import time
 while True:
+    # iterate through all entires in the download queue
     for row in db(db.download_queue.status=='pending').select():
 
-        als_file = AnalysisInputFile(row.bs_file_id)
+        # get queued app result from db
+        # note: only downloading 1 file per app result for now
+        f_row = db(db.bs_file.app_result_id==row.app_result_id).select().first()
+
+        # update status of app result
+        ar_row = db(db.app_result.id==row.app_result_id).select().first()
+        ar_row.update_record(status="downloading")
+        db.commit()
+
+        # create a File object
+        als_file = AnalysisInputFile(
+            app_result_id=f_row.app_result_id,
+            bs_file_id=f_row.id,
+            app_session_id=f_row.app_session_id,
+            file_num=f_row.file_num,
+            file_name=f_row.file_name,
+            local_path=f_row.local_path)
+
+        # download the file from BaseSpace
         if als_file.download_and_analyze():
             row.update_record(status='complete')
         else:
-            row.update_record(status='failed')
+            row.update_record(status='error')
         db.commit()
     time.sleep(5) # check every x seconds
 

@@ -2,23 +2,23 @@ import time
 while True:
     for row in db(db.analysis_queue.status=='pending').select():
 
-        # query db for file to analyze, access token, project to writeback to
-        f_row = db(db.bs_file.id==row.bs_file_id).select().first()
+        # get queued app result from db
+        # note: assuming we're analyzing a single file per app result, for now
+        f_row = db(db.bs_file.app_result_id==row.app_result_id).select().first()
 
-        f = File(
-#            analysis_id=f_row.analysis_id,
+        f = AnalysisInputFile(
+            app_result_id=f_row.app_result_id,
             app_session_id=f_row.app_session_id,
             file_num=f_row.file_num,
             file_name=f_row.file_name,
             local_path=f_row.local_path)
 
-        app_ssn_row = db(db.app_session.id==f.app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()
-
-        # create new Analysis and analyze downloaded File
-        new_als = Analysis(access_token=user_row.password, 
-            project_num=app_ssn_row.project_num,
-            app_action_num=app_ssn_row.app_action_num)
+        # create new AppResult and analyze downloaded File
+        new_als = AppResult(
+            app_result_id=row.app_result_id,
+            app_session_id=f_row.app_session_id,
+            project_num=f_row.app_result_id.project_num)
+        # TODO add try except
         fb = new_als.run_analysis_and_writeback(f)
 
         # update analysis queue with analysis feedback

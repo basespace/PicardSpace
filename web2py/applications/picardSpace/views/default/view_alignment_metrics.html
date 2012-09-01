@@ -5,12 +5,11 @@
 {{=message}}
 {{pass}}
 <br/>
+Picard Alignment Metrics for sample XXX
+<br/>
 
-Analyze this BAM file?
-Project num is {{=project_num}}
-Analysis num is {{=orig_analysis_num}}
-File num is {{=file_num}}
-{{=A(T("Analyze!"), _href=URL('get_auth_code'))}}
+{{=TABLE(*[TR(*rows) for rows in aln_tbl])}}
+
 
 {{block right_sidebar}}
 {{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='button',
