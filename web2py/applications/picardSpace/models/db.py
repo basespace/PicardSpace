@@ -54,6 +54,9 @@ auth.settings.actions_disabled.append('groups')
 # set page that user sees after logging in
 auth.settings.login_next = URL('user_now_logged_in')
 
+#auth.settings.on_failed_authorization = URL('index')
+#auth.settings.on_failed_authentication = URL('index')
+
 ## configure auth policy
 auth.settings.registration_requires_verification = False
 auth.settings.registration_requires_approval = False
@@ -63,7 +66,8 @@ auth.settings.reset_password_requires_verification = True
 #basespaceuser1 aTest-1 (app)
 client_id     = 'f4e812672009413d809b7caa31aae9b4'
 client_secret = 'a23bee7515a54142937d9eb56b7d6659'
-redirect_uri = 'http://localhost:8000/picardSpace/default/startanalysis'
+baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
+version       = 'v1pre3'
 
 # import OAuth2 account for authentication
 from gluon.contrib.login_methods.oauth20_account import OAuthAccount
@@ -73,10 +77,8 @@ class BaseSpaceAccount(OAuthAccount):
     """
     OAuth2 implementation for BaseSpace
     """
-    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'
-    baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
-    version       = 'v1pre2/'
-    token_url      = baseSpaceUrl + version + 'oauthv2/token/'
+    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
+    token_url      = baseSpaceUrl + version + '/oauthv2/token/'
     
     def __init__(self):
         OAuthAccount.__init__(self, 
@@ -84,10 +86,8 @@ class BaseSpaceAccount(OAuthAccount):
             client_id, 
             client_secret,
             self.auth_url,
-            self.token_url,
-            #redirect_uri=redirect_uri,  # redirect uri of the BaseSpace app -- reqd by BaseSpace API
-            state='user_login')
-            # TODO use scope parameter here?
+            self.token_url)            
+            #state='user_login')
             
     def get_user(self):
         """
@@ -96,9 +96,8 @@ class BaseSpaceAccount(OAuthAccount):
         if not self.accessToken():
             return None
 
-        # TODO need to check if myAPI isn't yet defined?
-        #if not self.myAPI:
-        self.myAPI = BaseSpaceAPI(AccessToken=self.accessToken(),apiServer=self.baseSpaceUrl + self.version)
+        # TODO update when app session num is optional parameter
+        self.myAPI = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,"", self.accessToken())
         
         user = None
         try:
@@ -121,25 +120,25 @@ auth.settings.login_form=BaseSpaceAccount()
 
 # TODO move tables to separate model?
 #import urllib2
-from urllib2 import Request, urlopen, URLError, HTTPError
-from urlparse import urlparse
+#from urllib2 import Request, urlopen, URLError, HTTPError
+#from urlparse import urlparse
 import os.path
 from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 
 
 db.define_table('app_session',
-    Field('app_action_num'),
+    Field('app_session_num'),
     Field('project_num'),          # the BaseSpace project to write-back results
-    Field('orig_analysis_num'),    # the old BaseSpace App Result that contained the file to be analyzed
+    Field('orig_app_result_num'),    # the old BaseSpace App Result that contained the file to be analyzed
     Field('file_num'),             # the BaseSpace file that was analyzed
     Field('new_app_result_id'),     # the newly created App Result
     Field('user_id'), db.auth_user) 
 
 db.define_table('app_result',
     Field('app_session_id', db.app_session),
-    Field('analysis_name'),
-    Field('analysis_num'),
+    Field('app_result_name'),
+    Field('app_result_num'),
     Field('project_num'),
     Field('description'),
     Field('status'))
@@ -150,7 +149,7 @@ db.define_table('bs_file',
     Field('file_num'),
     Field('file_name'),
     Field('local_path'),
-    Field('io_type'))   # 'input' or 'output' from an analysis
+    Field('io_type'))   # 'input' or 'output' from an appResult
 
 db.define_table('download_queue',
     Field('status'),
@@ -161,8 +160,6 @@ db.define_table('analysis_queue',
     Field('message'),
     Field('app_result_id', db.app_result))
     
-server          = 'https://api.cloud-endor.illumina.com/'
-version         = 'v1pre2'
 
 
 class File:
@@ -181,12 +178,12 @@ class File:
         """
         Download a file from BaseSpace inot the provided directory (created if doesn't exist)
         """     
-        # get access token for app session's user so we can use API (can't just use current user since accessing from cron script)
+        # get access token for app session's user (can't use current user since accessing from cron script)
         app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
         user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
                         
         # get file info from BaseSpace
-        myAPI = BaseSpaceAPI(AccessToken=user_row.access_token,apiServer= server + version)
+        myAPI = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_ssn_row.app_session_num,user_row.access_token)
         f = myAPI.getFileById(file_num)
                         
         # create local_path dir if it doesn't exist   
@@ -194,7 +191,6 @@ class File:
             os.makedirs(local_dir)
 
         # write downloaded data to new file
-        # Bug for Morten? - don't require trailing slash on local path
         f.downloadFile(myAPI,local_dir)
         return(local_dir + f.Name)
         
@@ -212,7 +208,7 @@ class AnalysisInputFile(File):
         
         # set local_path location and url for downloading
         # TODO remove hard-coded path
-        local_dir="applications/picardSpace/private/downloads/inputs/" + app_ssn_row.app_action_num + "/"        
+        local_dir="applications/picardSpace/private/downloads/inputs/" + app_ssn_row.app_session_num + "/"        
 
         # download file from BaseSpace
         try:
@@ -243,29 +239,29 @@ class AppResult:
     """
     An App Result in BaseSpace
     """
-    def __init__(self, app_result_id, app_session_id, project_num, status="new", analysis_name=None, analysis_num=None, description=None):
+    def __init__(self, app_result_id, app_session_id, project_num, status="new", app_result_name=None, app_result_num=None, description=None):
         self.app_result_id = app_result_id 
         self.app_session_id = app_session_id
         self.project_num = project_num
-        self.analysis_name = analysis_name
-        self.analysis_num = analysis_num
+        self.app_result_name = app_result_name
+        self.app_result_num = app_result_num
         self.description = description
         self.status = status
         
         self.output_files = []
         #TODO declare or initialize these here?
         #self.myAPI = ""
-        #self.analysis = ""        
+        #self.app_result = ""        
 
     def run_analysis_and_writeback(self, input_file):
         """
-        Create an analysis in BaseSpace, run picard on the provided file, and writeback output files to BaseSpace
+        Create an appResult in BaseSpace, run picard on the provided file, and writeback output files to BaseSpace
         """                
-        # create new analysis in BaseSpace (for writing back output files)
-        # TODO allow user to name analysis?
-        self.analysis_name = "test writeback"
+        # create new appResult in BaseSpace (for writing back output files)
+        # TODO allow user to name appResult?
+        self.app_result_name = "test writeback"
         self.description = "testing the writeback"
-        self._create_analysis(name=self.analysis_name,
+        self._create_app_result(name=self.app_result_name,
             description=self.description)
 
         # update db with status
@@ -277,37 +273,42 @@ class AppResult:
             message="Picard analysis failed -- see stderr.txt file for more information."
         else:
             self._update_status("writing back")
-            message=""
        
-            # write-back analysis output files to BaseSpace
-            if(not self._writeback_analysis_files()):
+            # write-back output files to BaseSpace
+            if(not self._writeback_app_result_files()):
                 self._update_status("analysis successful, but writeback error")
-                message+=" Creating new Analysis in BaseSpace failed."
+                message=" Creating new appResult in BaseSpace failed."
+            else:
+                self._update_status("complete")
+                message="Analysis and write-back complete"
+                self.app_result.appSession.setStatus(self.myAPI,'complete',message)
             
         return AnalysisFeedback(self.status, message)
 
 
     def _update_status(self, status):
-        """ Update db with provided status """
+        """
+        Update db with provided status
+        """
         self.status=status
         ar_row = db(db.app_result.id==self.app_result_id).select().first()
         ar_row.update_record(status=self.status)
         db.commit()
 
 
-    def _create_analysis(self, name, description):
+    def _create_app_result(self, name, description):
         """
-        Create a new analysis in BaseSpace with the provided name and description
+        Create a new appResult in BaseSpace with the provided name and description
         """
         app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
         user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()
         access_token = user_row.access_token
         
-        # create analysis and record the analysis number provided by BaseSpace
-        self.myAPI = BaseSpaceAPI(AccessToken=access_token, apiServer=server + version)
+        # create appResult and record the appResult number provided by BaseSpace
+        self.myAPI = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_ssn_row.app_session_num,access_token)
         project = self.myAPI.getProjectById(self.project_num)
-        self.analysis = project.createAnalysis(self.myAPI, name, description)
-        self.analysis_num = self.analysis.Id
+        self.app_result = project.createAppResult(self.myAPI, name, description, appSessionId=app_ssn_row.app_session_num )
+        self.app_result_num = self.app_result.Id
         
         
     def _run_picard(self, input_file):    
@@ -370,27 +371,25 @@ class AppResult:
             return(False)    
 
 
-    def _writeback_analysis_files(self):
+    def _writeback_app_result_files(self):
         """
-        Create a new Analysis in the provided Project and writeback all files in the local path to it
+        Create a new appResult in the provided Project and writeback all files in the local path to it
         """
         # TODO add correct dir name to write to
-        # instead of saving self.analysis, use myapi with getAnalysisById?        
-        try:
-            for f in self.output_files:
-                # upload file to BaseSpace                               
-                bs_file = self.analysis.uploadFile(self.myAPI, f.local_path, f.file_name, '', 'text/plain')
+        # instead of saving self.app_result, use myapi with getappResultById?        
+        for f in self.output_files:
+            # upload file to BaseSpace 
+            try:                              
+                bs_file = self.app_result.uploadFile(self.myAPI, f.local_path, f.file_name, '', 'text/plain')
+            except:
+                # TODO capture err msg?
+                return(False)
                 
-                # add file to local db
-                bs_file_id = db.bs_file.insert(app_session_id=f.app_session_id,
+            # add file to local db
+            bs_file_id = db.bs_file.insert(app_session_id=f.app_session_id,
                     file_num=bs_file.Id, 
                     file_name=f.file_name, 
                     local_path=f.local_path, 
                     io_type="output")               
-
-            self.analysis.setStatus(self.myAPI,'complete','Thats all folks')
-        except:
-            # TODO capture error message? and separate upload files from setStatus error msgs
-            return(False)
         
         return(True)

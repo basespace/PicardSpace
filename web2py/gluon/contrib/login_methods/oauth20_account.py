@@ -200,7 +200,13 @@ class OAuthAccount(object):
         accessToken()
         '''
         if not self.accessToken():
-            if not self.request.vars.code:
+            # TODO handle 'canceled' login from oauth2
+            if self.request.vars.error:
+                HTTP = self.globals['HTTP']
+                raise HTTP(200,
+                           "Permission to access BaseSpace data was rejected by the user",
+                           Location=None)
+            elif not self.request.vars.code:
                 self.session.redirect_uri=self.__redirect_uri(next)
                 data = dict(redirect_uri=self.session.redirect_uri,
                                   response_type='code',
