@@ -12,6 +12,13 @@ Analysis num is {{=orig_app_result_num}}
 File num is {{=file_num}}
 {{=A(T("Analyze!"), _href=URL('get_auth_code'))}}
 
+
+<div id="file_chooser">file_chooser</div>
+<!-- TODO added js here -->
+<script src="{{=URL('static','jqueryFileTree/jqueryFileTree.js')}}"></script>
+<script src="{{=URL('static','bs_file_tree.js')}}"></script>
+
+
 {{block right_sidebar}}
 {{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='button',
      _style='margin-top: 1em;')}}

@@ -23,6 +23,8 @@ baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
 version       = 'v1pre3'
 
 
+
+
 def index():
     """
     A user just launched the PicardSpace app
@@ -55,10 +57,10 @@ def index():
         if (ssn_ref.Type != 'Project'):
             message += " Error - unrecognized reference type " + ssn_ref.Type
         else:
-            # get the id and acess string of pre-selected Project
+            # get the project num and access string of pre-selected Project
             ref_content = ssn_ref.Content
             session.project_num = ref_content.Id
-            session.scope = ref_content.getAccessStr(scope='write')
+            session.scope = ref_content.getAccessStr(scope='read')
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
@@ -76,10 +78,10 @@ def user_now_logged_in():
     """
     # determine if the user pre-selected a sample/app_result/project to analyze
     if (not session.app_session_num):
-        redirect(URL("view_results"))
+        redirect(URL('view_results'))
     else:
         # An app session id was provided, now ask BaseSpace which item(s) the users selected
-        redirect(URL(choose_analysis_inputs))
+        redirect(URL('confirm_session_token'))
     return dict(message=T(message))
 
 
@@ -161,12 +163,32 @@ def view_alignment_metrics():
 
 
 @auth.requires_login()
+def confirm_session_token():
+    """
+    Check that we have an access token for the current session/project
+    (if user was already logged in, and launches from BaseSpace with a new project context)
+    """
+    response.menu = False
+
+    # get project to select items from
+    app_session_num = session.app_session_num
+    project_num = session.project_num
+    
+    # if the session num is new, need to update token with browse access
+    if db(db.app_session.app_session_num==session.app_session_num).isempty():
+        session.return_url = 'choose_analysis_inputs'
+        session.scope = 'read'
+        redirect(get_auth_code())
+    else:
+        redirect(choose_analysis_inputs())
+
+
+@auth.requires_login()
 def choose_analysis_inputs():
     """
     Offers the user choice of files to analyze, and ability to launch analysis (including download)
     """
     response.menu = False
-    
     # TODO handle no pre-selected items from app_session_num
 
     # get project to select items from
@@ -181,6 +203,18 @@ def choose_analysis_inputs():
     session.appresult_name = "Picard Alignment Metrics"
     session.appresult_description = "Picard aln QC"
 
+
+    # create app session in db
+    # TODO put user in here instead of after getting token?
+    app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
+        project_num=session.project_num,
+        orig_app_result_num=session.orig_app_result_num,
+        file_num=session.file_num)
+
+    # set scope for getting access token and url to redirect to afterwards
+    session.return_url = 'start_analysis'
+    session.scope = 'write'
+
     return dict(project_num=T(str(project_num)),
         orig_app_result_num=T(str(session.orig_app_result_num)),
         file_num=T(str(session.file_num)),
@@ -192,32 +226,18 @@ def choose_analysis_inputs():
 def get_auth_code():
     """
     Given an app session number, exchange this via BaseSpace API for item names to analyze
-    """
-    app_session_num = session.app_session_num
-    # TODO these shouldn't be session vars?
-    project_num = session.project_num
-    orig_app_result_num = session.orig_app_result_num
-    file_num = session.file_num
-    
-    # TODO move to choose_analysis_inputs
-    # create app session in db
-    app_session_id = db.app_session.insert(app_session_num=app_session_num,
-        project_num=project_num,
-        orig_app_result_num=orig_app_result_num,
-        file_num=file_num)
-        
-    scope = 'write project ' + str(project_num)    
-    #scope = 'read appresult ' + str(orig_app_result_num) + ',write project ' + str(project_num)
-    redirect_uri = 'http://localhost:8000/picardSpace/default/start_analysis'
+    """                    
+    scope = session.scope + ' project ' + str(session.project_num)
+    redirect_uri = 'http://localhost:8000/picardSpace/default/get_access_token'
 
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, app_session_num)
-    # TODO remove state var here (app session num is session var)?
-    userUrl = bs_api.getWebVerificationCode(scope,redirect_uri,state=app_session_num)
+    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num)
+    # TODO state needed here?
+    userUrl = bs_api.getWebVerificationCode(scope,redirect_uri,state=session.app_session_num)
     redirect(userUrl)
 
 
 @auth.requires_login()
-def start_analysis():
+def get_access_token():
     """
     Given an authorization code, exchange this for an authorization token
     Then use the token to access the underlying data of item(s)
@@ -229,7 +249,7 @@ def start_analysis():
         
     # record auth_code and app session num from 'state' to connect scope request with auth token (getting next)
     auth_code = request.get_vars.code
-    f = request.get_vars.state
+    #f = request.get_vars.state
         
     # exchange authorization code for auth token
     app_session_num = session.app_session_num
@@ -249,9 +269,19 @@ def start_analysis():
     # update user's access token in user table
     user_row.update_record(access_token=access_token)
 
-    # get session id from db
-    app_ssn_row = db(db.app_session.app_session_num==app_session_num).select().first()   
+    # go to url specified by original call to get token
+    redirect(URL(session.return_url))
     
+
+@auth.requires_login()
+def start_analysis():
+    """
+    Begin analysis, by creating app result and queuing file for download from BaseSpace
+    """
+    # get session id and current user id from db
+    app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+        
     # add new AppResult to db            
     app_result_id = db.app_result.insert(
         app_session_id=app_ssn_row.id,
@@ -290,6 +320,34 @@ def start_analysis():
     message = "welcome back from getting your auth token: " + access_token + " - now we're getting actual BS data!"
     return dict(message=T(message))
 
+
+def dirlist():
+    """
+    Return an html list of BaseSpace data (for display with JQuery File Tree)
+    """
+    # TODO if project num isn't set, we need a token to browse it
+    if not session.project_num:
+        return False
+
+    # for current project, get all app results from BaseSpace        
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    proj = bs_api.getProjectById(session.project_num)    
+    app_results = proj.getAppResults(bs_api)
+    
+    # now build html list
+    r=['<ul class="jqueryFileTree" style="display: none;">']
+    r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/">' + proj.Name + '</a></li>')
+    for result in app_results:
+       r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/' + result.Name + '/">' + result.Name + '</a></li>')
+       bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':250})
+       # TODO adjust file extensions
+       for f in bs_files:
+           r.append('<li class="file ext_txt"><a href="#" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')
+
+    r.append('</ul>')
+    return ''.join(r)
+    
 
 # for user authentication
 def user(): return dict(form=auth())
