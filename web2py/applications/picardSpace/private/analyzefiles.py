@@ -13,11 +13,15 @@ while True:
             file_name=f_row.file_name,
             local_path=f_row.local_path)
 
-        # create new AppResult and analyze downloaded File
+        # create new AppResult object and analyze downloaded File
         new_als = AppResult(
             app_result_id=row.app_result_id,
             app_session_id=f_row.app_session_id,
-            project_num=f_row.app_result_id.project_num)
+            project_num=f_row.app_result_id.project_num,
+            app_result_name=f_row.app_result_id.app_result_name,
+            app_result_num=f_row.app_result_id.app_result_num,
+            description=f_row.app_result_id.description,
+            status=f_row.app_result_id.status)
         # TODO add try except
         fb = new_als.run_analysis_and_writeback(f)
 

@@ -92,20 +92,28 @@ def view_results():
     """
     response.menu = False
     
+    # if arriving from just-launched analysis, display msg 'just launched'
     message = ""
     if request.get_vars.message:
         message = request.get_vars.message
 
+    # get BaseSpace API
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    
     # get all app sessions for the current user
     app_ssns = []
-    app_ssns.append( [ 'App Result Name', 'Status', 'Results' ] )
+    app_ssns.append( [ 'App Result Name', 'File Name', 'Project Name', 'Status', 'Results', 'Notes' ] )
     app_ssn_rows = db(db.app_session.user_id==auth.user_id).select()
     for app_ssn_row in app_ssn_rows:
         a_row = db(db.app_result.id==app_ssn_row.new_app_result_id).select().first()
         if a_row:
-            app_ssns.append([ a_row.app_result_name, a_row.status, app_ssn_row.id ])
+            # get project and file names
+            proj = bs_api.getProjectById(a_row.project_num)
+            bs_file = bs_api.getFileById(app_ssn_row.file_num)
+
+            app_ssns.append([ a_row.app_result_name, bs_file.Name, proj.Name, a_row.status, app_ssn_row.id, a_row.message ])
         
-    message += "Launch Analysis -- or View Results!"
     return dict(message=T(message), app_ssns=app_ssns)
 
     
@@ -186,7 +194,7 @@ def confirm_session_token():
 @auth.requires_login()
 def choose_analysis_inputs():
     """
-    Offers the user choice of files to analyze, and ability to launch analysis (including download)
+    Offers the user choice of files to analyze
     """
     response.menu = False
     # TODO handle no pre-selected items from app_session_num
@@ -194,32 +202,59 @@ def choose_analysis_inputs():
     # get project to select items from
     app_session_num = session.app_session_num
     project_num = session.project_num
+
+    # get name of project from BaseSpace
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    proj = bs_api.getProjectById(session.project_num)
+    project_name = proj.Name    
+
+    return dict(project_name=T(str(project_name)))
+
+
+@auth.requires_login()
+def confirm_analysis_inputs():
+    """
+    Confirms user's choice of file to analyze; offers naming app result and launch button
+    """
+    response.menu = False
     
-    # Given an item name to analyze, get an authorization code (which we'll exchange for an auth token)         
-    # TODO cheating here for now -- also using session vars; make these pass from view back to  get_auth_code()
+    # get file num that user selected
+    session.file_num = request.get_vars.file_num
+    
+    # TODO what do with orig app result num?
     session.orig_app_result_num = 9995
-#    project_num = 51
-    session.file_num = 2351949
-    session.appresult_name = "Picard Alignment Metrics"
-    session.appresult_description = "Picard aln QC"
+    # project_num = 51
+    # session.file_num = 2351949
+    # TODO make these user inputs in the view?
+    session.app_result_name = "Picard Alignment Metrics"
+    session.app_result_description = "Picard aln QC"
 
+    # get name of file and project (and sample, future) from BaseSpace
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    project = bs_api.getProjectById(session.project_num)
+    bs_file = bs_api.getFileById(session.file_num)
 
-    # create app session in db
-    # TODO put user in here instead of after getting token?
+    # create app_session in db
     app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
         project_num=session.project_num,
         orig_app_result_num=session.orig_app_result_num,
-        file_num=session.file_num)
+        file_num=session.file_num,
+        user_id=auth.user_id)
 
     # set scope for getting access token and url to redirect to afterwards
     session.return_url = 'start_analysis'
     session.scope = 'write'
 
-    return dict(project_num=T(str(project_num)),
+    return dict(project_num=T(str(session.project_num)),
         orig_app_result_num=T(str(session.orig_app_result_num)),
         file_num=T(str(session.file_num)),
-        appresult_name=T(str(session.appresult_name)),
-        appresult_description=T(str(session.appresult_description)))
+        # TODO above fields only needed for testing
+        file_name=T(str(bs_file.Name)),
+        project_name=T(str(project.Name)),
+        app_result_name=T(str(session.app_result_name)),
+        app_result_description=T(str(session.app_result_description)))
 
 
 @auth.requires_login()
@@ -239,8 +274,7 @@ def get_auth_code():
 @auth.requires_login()
 def get_access_token():
     """
-    Given an authorization code, exchange this for an authorization token
-    Then use the token to access the underlying data of item(s)
+    Given an authorization code, exchange this for an access token
     """
     # get authorization code from response url
     if (request.get_vars.error):
@@ -276,28 +310,34 @@ def get_access_token():
 @auth.requires_login()
 def start_analysis():
     """
-    Begin analysis, by creating app result and queuing file for download from BaseSpace
+    Create an app result in BaseSpace and the local db, then queue the input BAM file for download from BaseSpace
     """
     # get session id and current user id from db
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+                 
+    # add new AppResult to BaseSpace
+    bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+    project = bs_api.getProjectById(session.project_num)
+    app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num )
         
     # add new AppResult to db            
     app_result_id = db.app_result.insert(
         app_session_id=app_ssn_row.id,
         project_num=session.project_num,
         app_result_name=session.app_result_name,
-      #      app_result_num=self.app_result_num,
-        description=session.appresult_description,
-        status="queued for download")      
+        app_result_num=app_result.Id,
+        description=session.app_result_description,
+        status="queued for download",
+        message="none")      
     db.commit()
 
-    # update app session with user id, and new appresult
+    # update app session with user id, and new app_result
     # TODO include user_id when creating app session in db (above)?
     app_ssn_row.update_record(user_id=user_row.id, new_app_result_id=app_result_id)
     db.commit()
 
-    # add input (BAM) file to db
+    # add input BAM file to db
     bs_file_id = db.bs_file.insert(
         app_result_id=app_result_id,
         app_session_id=app_ssn_row.id,
@@ -311,8 +351,8 @@ def start_analysis():
     session.app_session_num = None
     session.project_num = None
     session.scope = None  
-    session.appresult_name = None
-    session.appresult_description = None                                
+    session.app_result_name = None
+    session.app_result_description = None                                
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis is Started!')))
@@ -321,7 +361,7 @@ def start_analysis():
     return dict(message=T(message))
 
 
-def dirlist():
+def browse_bs_app_results():
     """
     Return an html list of BaseSpace data (for display with JQuery File Tree)
     """
@@ -337,13 +377,13 @@ def dirlist():
     
     # now build html list
     r=['<ul class="jqueryFileTree" style="display: none;">']
-    r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/">' + proj.Name + '</a></li>')
+    #r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/">' + proj.Name + '</a></li>')
     for result in app_results:
-       r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/' + result.Name + '/">' + result.Name + '</a></li>')
+       r.append('<li class="directory collapsed"><a href="#" rel="' + proj.Name + '/' + result.Name + '/">' + result.Name + '</a></li>')
        bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':250})
        # TODO adjust file extensions
        for f in bs_files:
-           r.append('<li class="file ext_txt"><a href="#" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')
+           r.append('<li class="file ext_txt"><a href="confirm_analysis_inputs?file_num=' + f.Id + '" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')
 
     r.append('</ul>')
     return ''.join(r)

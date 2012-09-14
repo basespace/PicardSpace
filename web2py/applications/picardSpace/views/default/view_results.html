@@ -6,10 +6,11 @@
 {{pass}}
 <br/>
 
+<h3>App Results</h3>
 <!--{{=TABLE(*[TR(*rows) for rows in app_ssns])}}-->
 <table>
 {{for item in app_ssns:}}
-{{=TR(TD(item[0]), TD(item[1]), TD(A("Alignment Metrics", _href=URL('view_alignment_metrics', vars={'app_session_id': item[2]} ))))}}
+{{=TR(TD(item[0]), TD(item[1]), TD(item[2]), TD(item[3]), TD(A("Alignment Metrics", _href=URL('view_alignment_metrics', vars={'app_session_id': item[4]} ))), TD(item[5]))}}
 {{pass}}
 </table>
 

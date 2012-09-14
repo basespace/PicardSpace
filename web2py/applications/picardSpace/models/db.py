@@ -97,14 +97,14 @@ class BaseSpaceAccount(OAuthAccount):
             return None
 
         # TODO update when app session num is optional parameter
-        self.myAPI = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,"", self.accessToken())
+        self.bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,"", self.accessToken())
         
         user = None
         try:
-            user = self.myAPI.getUserById("current")
+            user = self.bs_api.getUserById("current")
         except:
             self.session.token = None
-            self.myAPI = None
+            self.bs_api = None
 
         if user:
             return dict(first_name = user.Name,
@@ -119,9 +119,6 @@ auth.settings.login_form=BaseSpaceAccount()
 
 
 # TODO move tables to separate model?
-#import urllib2
-#from urllib2 import Request, urlopen, URLError, HTTPError
-#from urlparse import urlparse
 import os.path
 from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
@@ -131,7 +128,9 @@ db.define_table('app_session',
     Field('app_session_num'),
     Field('project_num'),          # the BaseSpace project to write-back results
     Field('orig_app_result_num'),    # the old BaseSpace App Result that contained the file to be analyzed
+    # TODO move file_num to app_result?
     Field('file_num'),             # the BaseSpace file that was analyzed
+    # TODO delete below entry?
     Field('new_app_result_id'),     # the newly created App Result
     Field('user_id'), db.auth_user) 
 
@@ -139,13 +138,15 @@ db.define_table('app_result',
     Field('app_session_id', db.app_session),
     Field('app_result_name'),
     Field('app_result_num'),
-    Field('project_num'),
+    # TODO should project_num be in both app_session and app_result?
+    Field('project_num'),         # the project that contains this app result in BaseSpace
     Field('description'),
-    Field('status'))
+    Field('status'),
+    Field('message'))
 
 db.define_table('bs_file',
     Field('app_result_id', db.app_result),
-    Field('app_session_id', db.app_session), # TODO should this be only on the app_result?
+    Field('app_session_id', db.app_session), # TODO should this be only on the app_result? Yes
     Field('file_num'),
     Field('file_name'),
     Field('local_path'),
@@ -183,15 +184,15 @@ class File:
         user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
                         
         # get file info from BaseSpace
-        myAPI = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_ssn_row.app_session_num,user_row.access_token)
-        f = myAPI.getFileById(file_num)
+        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        f = bs_api.getFileById(file_num)
                         
         # create local_path dir if it doesn't exist   
         if not os.path.exists(local_dir):
             os.makedirs(local_dir)
 
         # write downloaded data to new file
-        f.downloadFile(myAPI,local_dir)
+        f.downloadFile(bs_api,local_dir)
         return(local_dir + f.Name)
         
     
@@ -239,7 +240,7 @@ class AppResult:
     """
     An App Result in BaseSpace
     """
-    def __init__(self, app_result_id, app_session_id, project_num, status="new", app_result_name=None, app_result_num=None, description=None):
+    def __init__(self, app_result_id, app_session_id, project_num, app_result_name, description, app_result_num, status="new", message=""):
         self.app_result_id = app_result_id 
         self.app_session_id = app_session_id
         self.project_num = project_num
@@ -247,68 +248,63 @@ class AppResult:
         self.app_result_num = app_result_num
         self.description = description
         self.status = status
+        self.message = message
         
-        self.output_files = []
-        #TODO declare or initialize these here?
-        #self.myAPI = ""
-        #self.app_result = ""        
+        self.output_files = []           
+
 
     def run_analysis_and_writeback(self, input_file):
         """
         Create an appResult in BaseSpace, run picard on the provided file, and writeback output files to BaseSpace
-        """                
-        # create new appResult in BaseSpace (for writing back output files)
-        # TODO allow user to name appResult?
-        self.app_result_name = "test writeback"
-        self.description = "testing the writeback"
-        self._create_app_result(name=self.app_result_name,
-            description=self.description)
+        """                        
+        # get BaseSpace API
+        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
+        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        app_result = bs_api.getAppResultById(self.app_result_num)
 
         # update db with status
-        self._update_status("running analysis")
+        self._update_status("running analysis", "none")
                 
         # run picard
-        if(not self._run_picard(input_file=input_file)):
-            self._update_status("analysis error")
-            message="Picard analysis failed -- see stderr.txt file for more information."
+        message = "analysis successful"
+        try:
+            if not (self._run_picard(input_file=input_file)):
+                message = "analysis failed"
+        except IOError as e:
+            message = "Error in local file I/O (error number {0}): {1}".format(e.errno, e)
+            self._update_status("analysis error", message)
+        except:        
+            message = "Picard analysis failed -- see stderr.txt file for more information."
+            self._update_status("analysis error", message)
         else:
-            self._update_status("writing back")
+            self._update_status("writing back", message)
        
-            # write-back output files to BaseSpace
-            if(not self._writeback_app_result_files()):
-                self._update_status("analysis successful, but writeback error")
-                message=" Creating new appResult in BaseSpace failed."
+            # writeback output files
+            try:
+                self._writeback_app_result_files()
+            except Exception as e:
+                message += "; writeback error: {0}".format(str(e))
+                self._update_status("analysis successful, writeback error", message)
             else:
-                self._update_status("complete")
-                message="Analysis and write-back complete"
-                self.app_result.appSession.setStatus(self.myAPI,'complete',message)
+                message += "; write-back successful"
+                self._update_status("complete", message)
+                # TODO update both BaseSpace and db session status, for erred and non-erred states
+                # update app_session status
+                app_result.appSession.setStatus(bs_api,'complete',message)            
             
         return AnalysisFeedback(self.status, message)
 
 
-    def _update_status(self, status):
+    def _update_status(self, status, message):
         """
-        Update db with provided status
+        Update db with provided status and detailed message
         """
         self.status=status
+        self.message=message
         ar_row = db(db.app_result.id==self.app_result_id).select().first()
-        ar_row.update_record(status=self.status)
+        ar_row.update_record(status=self.status, message=self.message)
         db.commit()
-
-
-    def _create_app_result(self, name, description):
-        """
-        Create a new appResult in BaseSpace with the provided name and description
-        """
-        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()
-        access_token = user_row.access_token
-        
-        # create appResult and record the appResult number provided by BaseSpace
-        self.myAPI = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_ssn_row.app_session_num,access_token)
-        project = self.myAPI.getProjectById(self.project_num)
-        self.app_result = project.createAppResult(self.myAPI, name, description, appSessionId=app_ssn_row.app_session_num )
-        self.app_result_num = self.app_result.Id
         
         
     def _run_picard(self, input_file):    
@@ -327,43 +323,45 @@ class AppResult:
             "applications/picardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", 
             "INPUT=" + input_path, 
             "OUTPUT=" + output_path, 
-            "REFERENCE_SEQUENCE=applications/picardSpace/private/genome.fa"]
+            #"REFERENCE_SEQUENCE=applications/picardSpace/private/genome.fa",
+            "VALIDATION_STRINGENCY=LENIENT",
+            "ASSUME_SORTED=true"]
         p = Popen(command, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate()
         
         # add output file to writeback list
         if (os.path.exists(output_path)):           
             f = File(app_session_id=self.app_session_id,
+                app_result_id=self.app_result_id,
                 file_name=aln_met_name,
                 local_path=output_path)
             self.output_files.append(f)
         
         # write stdout and stderr to files for troubleshooting
-        try:
-             stdout_name = file_name + ".stdout.txt"
-             stderr_name = file_name + ".stderr.txt"
-             stdout_path = os.path.join(dirname, stdout_name)
-             stderr_path = os.path.join(dirname, stderr_name)
-             F_STDOUT = open( stdout_path, "w")
-             F_STDERR = open( stderr_path, "w")
-        except IOError as e:
-            # TODO how to record error msg for user?
-            msg = "I/O error({0}): {1}".format(e.errno, e)
-            return False
-        else:                            
-            F_STDOUT.write(stdout)
-            F_STDERR.write(stderr)                
-            F_STDOUT.close()
-            F_STDERR.close()
-            f_stdout = File(app_session_id=self.app_session_id,
+        stdout_name = file_name + ".stdout.txt"
+        stderr_name = file_name + ".stderr.txt"
+        stdout_path = os.path.join(dirname, stdout_name)
+        stderr_path = os.path.join(dirname, stderr_name)
+        F_STDOUT = open( stdout_path, "w")
+        F_STDERR = open( stderr_path, "w")
+        F_STDOUT.write(stdout)
+        F_STDERR.write(stderr)                
+        F_STDOUT.close()
+        F_STDERR.close()
+        
+        # add stdout and stderr to write-back queue
+        f_stdout = File(app_session_id=self.app_session_id,
+                app_result_id=self.app_result_id,
                 file_name=stdout_name,
                 local_path=stdout_path)        
-            f_stderr = File(app_session_id=self.app_session_id,
+        f_stderr = File(app_session_id=self.app_session_id,
+                app_result_id=self.app_result_id,
                 file_name=stderr_name,
                 local_path=stderr_path)        
-            self.output_files.append(f_stdout)
-            self.output_files.append(f_stderr)
+        self.output_files.append(f_stdout)
+        self.output_files.append(f_stderr)
         
+        # return true if picard return code was successful
         # TODO handle returncode=None, which means process is still running
         if (p.returncode == 0):
             return(True)
@@ -373,23 +371,24 @@ class AppResult:
 
     def _writeback_app_result_files(self):
         """
-        Create a new appResult in the provided Project and writeback all files in the local path to it
+        Writeback all files in output_files list, and create corresponding entries in the local db
         """
+        # get BaseSpace API
+        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
+        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        app_result = bs_api.getAppResultById(self.app_result_num)
+        
         # TODO add correct dir name to write to
-        # instead of saving self.app_result, use myapi with getappResultById?        
+        # upload files to BaseSpace
         for f in self.output_files:
-            # upload file to BaseSpace 
-            try:                              
-                bs_file = self.app_result.uploadFile(self.myAPI, f.local_path, f.file_name, '', 'text/plain')
-            except:
-                # TODO capture err msg?
-                return(False)
+            bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')                
                 
             # add file to local db
             bs_file_id = db.bs_file.insert(app_session_id=f.app_session_id,
+                    app_result_id=f.app_result_id,
                     file_num=bs_file.Id, 
                     file_name=f.file_name, 
                     local_path=f.local_path, 
                     io_type="output")               
-        
-        return(True)
+            db.commit()
