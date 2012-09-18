@@ -355,7 +355,7 @@ def start_analysis():
     session.app_result_description = None                                
 
     # redirect user to view_results page -- with message that their analysis started
-    redirect(URL('view_results', vars=dict(message='Your Analysis is Started!')))
+    redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))
                               
     message = "welcome back from getting your auth token: " + access_token + " - now we're getting actual BS data!"
     return dict(message=T(message))
@@ -373,6 +373,8 @@ def browse_bs_app_results():
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
     proj = bs_api.getProjectById(session.project_num)    
+    # only display first 10 AppResults
+#    app_results = proj.getAppResults(bs_api, myQp={'Limit':10})
     app_results = proj.getAppResults(bs_api)
     
     # now build html list

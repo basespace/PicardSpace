@@ -255,16 +255,10 @@ class AppResult:
 
     def run_analysis_and_writeback(self, input_file):
         """
-        Create an appResult in BaseSpace, run picard on the provided file, and writeback output files to BaseSpace
-        """                        
-        # get BaseSpace API
-        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
-        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
-        app_result = bs_api.getAppResultById(self.app_result_num)
-
-        # update db with status
-        self._update_status("running analysis", "none")
+        Run picard on the provided file and writeback output files to BaseSpace, updating statuses as we go
+        """                                    
+        # update db and BaseSpace App Session with status
+        self._update_status('running', 'picard is running', 'Running')
                 
         # run picard
         message = "analysis successful"
@@ -273,10 +267,10 @@ class AppResult:
                 message = "analysis failed"
         except IOError as e:
             message = "Error in local file I/O (error number {0}): {1}".format(e.errno, e)
-            self._update_status("analysis error", message)
+            self._update_status('analysis error', message, 'Error')
         except:        
             message = "Picard analysis failed -- see stderr.txt file for more information."
-            self._update_status("analysis error", message)
+            self._update_status('analysis error', message, 'Error')
         else:
             self._update_status("writing back", message)
        
@@ -285,27 +279,35 @@ class AppResult:
                 self._writeback_app_result_files()
             except Exception as e:
                 message += "; writeback error: {0}".format(str(e))
-                self._update_status("analysis successful, writeback error", message)
+                self._update_status('analysis successful, writeback error', message, 'Error')
             else:
                 message += "; write-back successful"
-                self._update_status("complete", message)
-                # TODO update both BaseSpace and db session status, for erred and non-erred states
-                # update app_session status
-                app_result.appSession.setStatus(bs_api,'complete',message)            
+                self._update_status('complete', message, 'Complete')
             
         return AnalysisFeedback(self.status, message)
 
 
-    def _update_status(self, status, message):
+    def _update_status(self, local_status, message, bs_ssn_status=None):
         """
-        Update db with provided status and detailed message
+        Update db with provided status and detailed message, and update BaseSpace App Session status if provided
         """
-        self.status=status
+        # update status in local db
+        self.status=local_status
         self.message=message
         ar_row = db(db.app_result.id==self.app_result_id).select().first()
         ar_row.update_record(status=self.status, message=self.message)
         db.commit()
         
+        # optionally update status of AppSession in BaseSpace
+        if bs_ssn_status:
+            # get BaseSpace API
+            app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+            user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
+            bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+            app_result = bs_api.getAppResultById(self.app_result_num)
+            app_ssn = app_result.AppSession 
+            app_ssn.setStatus(bs_api, bs_ssn_status, message)   
+
         
     def _run_picard(self, input_file):    
         """
@@ -358,7 +360,9 @@ class AppResult:
                 app_result_id=self.app_result_id,
                 file_name=stderr_name,
                 local_path=stderr_path)        
-        self.output_files.append(f_stdout)
+        # TODO API choking with 400 code when uploading empty file -- how to handle this?
+        #self.output_files.append(f_stdout)
+        # TODO instead of writing stderr file to BS, use error mechanism as described in API?
         self.output_files.append(f_stderr)
         
         # return true if picard return code was successful
@@ -379,10 +383,11 @@ class AppResult:
         bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
         app_result = bs_api.getAppResultById(self.app_result_num)
         
-        # TODO add correct dir name to write to
         # upload files to BaseSpace
         for f in self.output_files:
-            bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')                
+
+            # TODO add dir name to write to?
+            bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
                 
             # add file to local db
             bs_file_id = db.bs_file.insert(app_session_id=f.app_session_id,
