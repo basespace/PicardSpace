@@ -1,4 +1,6 @@
 import time
+from picardSpace import AnalysisInputFile
+
 while True:
     # iterate through all entires in the download queue
     for row in db(db.download_queue.status=='pending').select():
@@ -22,7 +24,12 @@ while True:
             local_path=f_row.local_path)
 
         # download the file from BaseSpace
-        if als_file.download_and_analyze():
+        try:
+            retval = als_file.download_and_analyze()
+        except:
+            # TODO print to log file?
+            print "Error: {0}".format(str(e))
+        if retval:
             row.update_record(status='complete')
         else:
             row.update_record(status='error')

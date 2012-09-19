@@ -1,4 +1,6 @@
 import time
+from picardSpace import AnalysisInputFile, AppResult
+
 while True:
     for row in db(db.analysis_queue.status=='pending').select():
 
@@ -22,8 +24,12 @@ while True:
             app_result_num=f_row.app_result_id.app_result_num,
             description=f_row.app_result_id.description,
             status=f_row.app_result_id.status)
-        # TODO add try except
-        fb = new_als.run_analysis_and_writeback(f)
+        # run analysis and writeback results to BaseSpace
+        try:
+            fb = new_als.run_analysis_and_writeback(f)
+        except Exception as e:
+            # TODO print to log file?
+            print "Error: {0}".format(str(e))
 
         # update analysis queue with analysis feedback
         row.update_record(status=fb.status)

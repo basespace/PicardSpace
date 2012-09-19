@@ -8,6 +8,7 @@ from urlparse import urlparse
 import os.path
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
+from picardSpace import File
 
 # TODO store these here?
 #basespaceuser1 aTest-1 (app)
@@ -72,9 +73,11 @@ def index():
             
     return dict(message=T(message))
 
+
 @auth.requires_login()
 def user_now_logged_in():
     """
+    Just determined that the user is logged into picardSpace; if a project context was provided, redirect to choose inputs flow, otherwise redirect to view results page
     """
     # determine if the user pre-selected a sample/app_result/project to analyze
     if (not session.app_session_num):
@@ -103,7 +106,7 @@ def view_results():
     
     # get all app sessions for the current user
     app_ssns = []
-    app_ssns.append( [ 'App Result Name', 'File Name', 'Project Name', 'Status', 'Results', 'Notes' ] )
+    app_ssns.append( [ 'App Result Name', 'File Name', 'Project Name', 'Status', 'Results', 'Notes', 'Date Created' ] )
     app_ssn_rows = db(db.app_session.user_id==auth.user_id).select()
     for app_ssn_row in app_ssn_rows:
         a_row = db(db.app_result.id==app_ssn_row.new_app_result_id).select().first()
@@ -112,7 +115,7 @@ def view_results():
             proj = bs_api.getProjectById(a_row.project_num)
             bs_file = bs_api.getFileById(app_ssn_row.file_num)
 
-            app_ssns.append([ a_row.app_result_name, bs_file.Name, proj.Name, a_row.status, app_ssn_row.id, a_row.message ])
+            app_ssns.append([ a_row.app_result_name, bs_file.Name, proj.Name, a_row.status, app_ssn_row.id, a_row.message, app_ssn_row.date_created ])
         
     return dict(message=T(message), app_ssns=app_ssns)
 
@@ -182,6 +185,7 @@ def confirm_session_token():
     app_session_num = session.app_session_num
     project_num = session.project_num
     
+    # TODO this isn't working - session not stored in db at initial login - leads to double oauth
     # if the session num is new, need to update token with browse access
     if db(db.app_session.app_session_num==session.app_session_num).isempty():
         session.return_url = 'choose_analysis_inputs'
@@ -235,13 +239,16 @@ def confirm_analysis_inputs():
     bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
     project = bs_api.getProjectById(session.project_num)
     bs_file = bs_api.getFileById(session.file_num)
+    app_ssn = bs_api.getAppSession(session.app_session_num)
 
+    # TODO move this to index page, since session is already present in BaseSpace?
     # create app_session in db
     app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
         project_num=session.project_num,
         orig_app_result_num=session.orig_app_result_num,
         file_num=session.file_num,
-        user_id=auth.user_id)
+        user_id=auth.user_id,
+        date_created=app_ssn.DateCreated)
 
     # set scope for getting access token and url to redirect to afterwards
     session.return_url = 'start_analysis'
