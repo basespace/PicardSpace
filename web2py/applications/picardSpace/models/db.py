@@ -122,11 +122,8 @@ auth.settings.login_form=BaseSpaceAccount()
 db.define_table('app_session',
     Field('app_session_num'),
     Field('project_num'),          # the BaseSpace project to write-back results
-    Field('orig_app_result_num'),    # the old BaseSpace App Result that contained the file to be analyzed
     # TODO move file_num to app_result?
     Field('file_num'),             # the BaseSpace file that was analyzed
-    # TODO delete below entry?
-    Field('new_app_result_id'),     # the newly created App Result
     Field('user_id'), db.auth_user,
     Field('date_created')) 
 

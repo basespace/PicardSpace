@@ -62,6 +62,12 @@ def index():
             ref_content = ssn_ref.Content
             session.project_num = ref_content.Id
             session.scope = ref_content.getAccessStr(scope='read')
+            
+            # create app_session in db
+            app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
+                project_num=session.project_num,
+                #user_id=auth.user_id,
+                date_created=app_ssn.DateCreated) 
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
@@ -83,7 +89,11 @@ def user_now_logged_in():
     if (not session.app_session_num):
         redirect(URL('view_results'))
     else:
-        # An app session id was provided, now ask BaseSpace which item(s) the users selected
+        # an app session num was provided, now ask BaseSpace which item(s) the users selected        
+        # update app session with user info
+        app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
+        app_ssn_row.update_record(user_id=auth.user_id)
+
         redirect(URL('confirm_session_token'))
     return dict(message=T(message))
 
@@ -104,18 +114,22 @@ def view_results():
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
     
-    # get all app sessions for the current user
+    # get all app results for the current user
     app_ssns = []
     app_ssns.append( [ 'App Result Name', 'File Name', 'Project Name', 'Status', 'Results', 'Notes', 'Date Created' ] )
-    app_ssn_rows = db(db.app_session.user_id==auth.user_id).select()
-    for app_ssn_row in app_ssn_rows:
-        a_row = db(db.app_result.id==app_ssn_row.new_app_result_id).select().first()
-        if a_row:
-            # get project and file names
-            proj = bs_api.getProjectById(a_row.project_num)
-            bs_file = bs_api.getFileById(app_ssn_row.file_num)
+    ssn_rows = db(db.app_session.user_id==auth.user_id).select()
+    for ssn_row in ssn_rows:
+        rslt_rows = db(db.app_result.app_session_id==ssn_row.id).select()
 
-            app_ssns.append([ a_row.app_result_name, bs_file.Name, proj.Name, a_row.status, app_ssn_row.id, a_row.message, app_ssn_row.date_created ])
+        # get project and file names for each AppResult    
+        for rslt_row in rslt_rows:          
+            proj = bs_api.getProjectById(rslt_row.project_num)
+            
+            # getting input BAM file here (restricted to single input file)
+            file_row = db((db.bs_file.app_result_id==rslt_row.id) & (db.bs_file.io_type=='input')).select().first()
+            bs_file = bs_api.getFileById(file_row.file_num)
+
+            app_ssns.append([ rslt_row.app_result_name, bs_file.Name, proj.Name, rslt_row.status, ssn_row.id, rslt_row.message, ssn_row.date_created ])
         
     return dict(message=T(message), app_ssns=app_ssns)
 
@@ -185,14 +199,13 @@ def confirm_session_token():
     app_session_num = session.app_session_num
     project_num = session.project_num
     
-    # TODO this isn't working - session not stored in db at initial login - leads to double oauth
     # if the session num is new, need to update token with browse access
     if db(db.app_session.app_session_num==session.app_session_num).isempty():
         session.return_url = 'choose_analysis_inputs'
         session.scope = 'read'
-        redirect(get_auth_code())
+        redirect('get_auth_code')
     else:
-        redirect(choose_analysis_inputs())
+        redirect('choose_analysis_inputs')
 
 
 @auth.requires_login()
@@ -201,7 +214,7 @@ def choose_analysis_inputs():
     Offers the user choice of files to analyze
     """
     response.menu = False
-    # TODO handle no pre-selected items from app_session_num
+    # TODO handle no pre-selected items from app_session_num?
 
     # get project to select items from
     app_session_num = session.app_session_num
@@ -227,7 +240,7 @@ def confirm_analysis_inputs():
     session.file_num = request.get_vars.file_num
     
     # TODO what do with orig app result num?
-    session.orig_app_result_num = 9995
+    #session.orig_app_result_num = 9995
     # project_num = 51
     # session.file_num = 2351949
     # TODO make these user inputs in the view?
@@ -241,21 +254,17 @@ def confirm_analysis_inputs():
     bs_file = bs_api.getFileById(session.file_num)
     app_ssn = bs_api.getAppSession(session.app_session_num)
 
-    # TODO move this to index page, since session is already present in BaseSpace?
-    # create app_session in db
-    app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
-        project_num=session.project_num,
-        orig_app_result_num=session.orig_app_result_num,
-        file_num=session.file_num,
-        user_id=auth.user_id,
-        date_created=app_ssn.DateCreated)
+    # TODO skip this and depend on creating File in db in start_analysis()??
+    # update app session with user's file choice
+    app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
+    app_ssn_row.update_record(file_num=session.file_num)
 
     # set scope for getting access token and url to redirect to afterwards
     session.return_url = 'start_analysis'
     session.scope = 'write'
 
     return dict(project_num=T(str(session.project_num)),
-        orig_app_result_num=T(str(session.orig_app_result_num)),
+        #orig_app_result_num=T(str(session.orig_app_result_num)),
         file_num=T(str(session.file_num)),
         # TODO above fields only needed for testing
         file_name=T(str(bs_file.Name)),
@@ -339,10 +348,10 @@ def start_analysis():
         message="none")      
     db.commit()
 
-    # update app session with user id, and new app_result
+    # update app session with user id
     # TODO include user_id when creating app session in db (above)?
-    app_ssn_row.update_record(user_id=user_row.id, new_app_result_id=app_result_id)
-    db.commit()
+    #app_ssn_row.update_record(user_id=user_row.id)
+    #db.commit()
 
     # add input BAM file to db
     bs_file_id = db.bs_file.insert(
