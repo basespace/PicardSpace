@@ -31,8 +31,6 @@ def index():
     A user just launched the PicardSpace app
     Retrieve the app session number to identify items that the users selected to analyze
     """
-    # display welcome 'flash' dialog and disable menu navigation
-    # response.flash = "Welcome to PicardSpace!"    
     response.menu = False
     response.title = "PicardSpace"
     response.subtitle = "Home Page"
@@ -42,7 +40,9 @@ def index():
     session.project_num = None
     session.scope = None
 
-    message = "Welcome to PicardSpace! Please log in."
+    main_msg = 'Welcome to PicardSpace'
+    scnd_msg = 'Please log in'
+    err_msg  = ''
     
     # record app session number if provided
     if (request.get_vars.appsessionuri):
@@ -56,7 +56,7 @@ def index():
         # TODO iterate over all inputs and assemble into master scope string?
         ssn_ref = app_ssn.References[0]
         if (ssn_ref.Type != 'Project'):
-            message += " Error - unrecognized reference type " + ssn_ref.Type
+            err_msg += "Error - unrecognized reference type " + ssn_ref.Type + ". "
         else:
             # get the project num and access string of pre-selected Project
             ref_content = ssn_ref.Content
@@ -75,9 +75,9 @@ def index():
    
     # TODO TEMP show app session num
     if session.app_session_num:
-        message += ". (App session num is " + session.app_session_num + ")"
+        err_msg += "(App session num is " + session.app_session_num + ")"
             
-    return dict(message=T(message))
+    return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg))
 
 
 @auth.requires_login()

@@ -1,20 +1,25 @@
 {{left_sidebar_enabled,right_sidebar_enabled=False,False}}
 {{extend 'layout.html'}}
 
-{{if 'message' in globals():}}
-{{=message}}
-{{pass}}
-<br/>
-<h3>Picard Alignment Metrics for sample XXX</h3>
-<br/>
+<div class="page-header">
+  <h1>Picard Alignment Metrics</h1>
+    <p>for sample XXX</p>
+</div>
 
-{{=TABLE(*[TR(*rows) for rows in aln_tbl])}}
-<br/>
-<h3>Alignment Metrics Header</h3>
-{{=hdr}}
+<div class="accordion" id="accordion2">
+  <div class="accordion-group">
+    <div class="accordion-heading">
+      <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseOne">
+        Header
+      </a>
+    </div>
+    <div id="collapseOne" class="accordion-body collapse">
+      <div class="accordion-inner">
+        {{=hdr}}
+      </div>
+    </div>
+  </div>
+</div>
 
 
-{{block right_sidebar}}
-{{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='button',
-     _style='margin-top: 1em;')}}
-{{end}}
+{{=TABLE(*[TR(*rows) for rows in aln_tbl], _class='table table-bordered table-striped')}}

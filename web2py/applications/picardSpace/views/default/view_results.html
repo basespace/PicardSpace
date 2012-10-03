@@ -1,21 +1,15 @@
 {{left_sidebar_enabled,right_sidebar_enabled=False,False}}
 {{extend 'layout.html'}}
 
-{{if 'message' in globals():}}
-{{=message}}
-{{pass}}
-<br/>
+<div class="page-header">
+  <h1>App Results</h1>
+</div>
 
-<h3>App Results</h3>
+<p class="text-warning lead">Your Analysis Has Started</p>
+
 <!--{{=TABLE(*[TR(*rows) for rows in app_ssns])}}-->
-<table>
+<table class="table table-bordered table-hover">
 {{for item in app_ssns:}}
 {{=TR(TD(item[0]), TD(item[1]), TD(item[2]), TD(item[3]), TD(A("Alignment Metrics", _href=URL('view_alignment_metrics', vars={'app_session_id': item[4]} ))), TD(item[5]), TD(item[6]))}}
 {{pass}}
 </table>
-
-
-{{block right_sidebar}}
-{{=A(T("Administrative Interface"), _href=URL('admin','default','index'), _class='button',
-     _style='margin-top: 1em;')}}
-{{end}}
