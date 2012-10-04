@@ -116,20 +116,24 @@ def view_results():
     
     # get all app results for the current user
     app_ssns = []
-    app_ssns.append( [ 'App Result Name', 'File Name', 'Project Name', 'Status', 'Results', 'Notes', 'Date Created' ] )
-    ssn_rows = db(db.app_session.user_id==auth.user_id).select()
+    
+    ssn_rows = db(db.app_session.user_id==auth.user_id).select(orderby=~db.app_session.date_created)
     for ssn_row in ssn_rows:
         rslt_rows = db(db.app_result.app_session_id==ssn_row.id).select()
 
-        # get project and file names for each AppResult    
+        # get project, sample, and file names for each AppResult    
         for rslt_row in rslt_rows:          
             proj = bs_api.getProjectById(rslt_row.project_num)
+            sample_name = "unknown"
+            if (rslt_row.sample_num):
+                sample = bs_api.getSampleById(rslt_row.sample_num)
+                sample_name = sample.Name
             
             # getting input BAM file here (restricted to single input file)
             file_row = db((db.bs_file.app_result_id==rslt_row.id) & (db.bs_file.io_type=='input')).select().first()
             bs_file = bs_api.getFileById(file_row.file_num)
 
-            app_ssns.append([ rslt_row.app_result_name, bs_file.Name, proj.Name, rslt_row.status, ssn_row.id, rslt_row.message, ssn_row.date_created ])
+            app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'sample_name':sample_name, 'file_name':bs_file.Name, 'project_name':proj.Name, 'status':rslt_row.status, 'app_session_id':ssn_row.id, 'notes':rslt_row.message, 'date_created':ssn_row.date_created } )
         
     return dict(message=T(message), app_ssns=app_ssns)
 
@@ -142,6 +146,13 @@ def view_alignment_metrics():
     response.menu = False
     app_session_id = request.get_vars.app_session_id
     
+    # get sample name
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    ar_row = db(db.app_result.app_session_id==app_session_id).select().first()
+    sample_num = ar_row.sample_num
+    sample = bs_api.getSampleById(sample_num)
+    
     f_row = db((db.bs_file.app_session_id==app_session_id)
         & (db.bs_file.io_type=='output')).select().first()
         # TODO select only AlignmentMetrics file, remove first()
@@ -149,7 +160,10 @@ def view_alignment_metrics():
     hdr = ""
     aln_tbl = []
     tps_aln_tbl = [["data not available"]]
+    file_name = "unknown"
     if f_row:
+        file_name = f_row.file_name
+        
         # create file object
         f = File(app_session_id=f_row.app_session_id,
                 file_name=f_row.file_name,
@@ -184,7 +198,7 @@ def view_alignment_metrics():
             tps_aln_tbl = zip(*aln_tbl)
 
     # TODO check that user is correct (could jump to this page as another user)
-    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr))
+    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name))
 
 
 @auth.requires_login()
@@ -236,16 +250,17 @@ def confirm_analysis_inputs():
     """
     response.menu = False
     
-    # get file num that user selected
+    # get file_num and app_result_num that user selected
     session.file_num = request.get_vars.file_num
+    orig_app_result_num = request.get_vars.app_result_num
     
     # TODO what do with orig app result num?
     #session.orig_app_result_num = 9995
     # project_num = 51
     # session.file_num = 2351949
     # TODO make these user inputs in the view?
-    session.app_result_name = "Picard Alignment Metrics"
-    session.app_result_description = "Picard aln QC"
+#    session.app_result_name = "Picard Alignment Metrics"
+#    session.app_result_description = "Picard aln QC"
 
     # get name of file and project (and sample, future) from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -253,6 +268,15 @@ def confirm_analysis_inputs():
     project = bs_api.getProjectById(session.project_num)
     bs_file = bs_api.getFileById(session.file_num)
     app_ssn = bs_api.getAppSession(session.app_session_num)
+    
+    # get sample num and name from AppResult, if present
+    app_result = bs_api.getAppResultById(orig_app_result_num)
+    samples_ids = app_result.getReferencedSamplesIds()
+    sample_name = "unknown"
+    if samples_ids:
+        session.sample_num = samples_ids[0]
+        sample = bs_api.getSampleById(session.sample_num) 
+        sample_name = sample.Name       
 
     # TODO skip this and depend on creating File in db in start_analysis()??
     # update app session with user's file choice
@@ -264,13 +288,11 @@ def confirm_analysis_inputs():
     session.scope = 'write'
 
     return dict(project_num=T(str(session.project_num)),
-        #orig_app_result_num=T(str(session.orig_app_result_num)),
         file_num=T(str(session.file_num)),
         # TODO above fields only needed for testing
+        sample_name=T(str(sample_name)),
         file_name=T(str(bs_file.Name)),
-        project_name=T(str(project.Name)),
-        app_result_name=T(str(session.app_result_name)),
-        app_result_description=T(str(session.app_result_description)))
+        project_name=T(str(project.Name)))        
 
 
 @auth.requires_login()
@@ -278,6 +300,10 @@ def get_auth_code():
     """
     Given an app session number, exchange this via BaseSpace API for item names to analyze
     """                    
+    # TODO get post var 'appresult_name', if present, and store in db
+    if (request.post_vars.app_result_name):
+        session.app_result_name = request.post_vars.app_result_name
+    
     scope = session.scope + ' project ' + str(session.project_num)
     redirect_uri = 'http://localhost:8000/picardSpace/default/get_access_token'
 
@@ -335,7 +361,8 @@ def start_analysis():
     # add new AppResult to BaseSpace
     bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
     project = bs_api.getProjectById(session.project_num)
-    app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num )
+    sample = bs_api.getSampleById(session.sample_num)
+    app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
         
     # add new AppResult to db            
     app_result_id = db.app_result.insert(
@@ -343,6 +370,7 @@ def start_analysis():
         project_num=session.project_num,
         app_result_name=session.app_result_name,
         app_result_num=app_result.Id,
+        sample_num=session.sample_num,
         description=session.app_result_description,
         status="queued for download",
         message="none")      
@@ -401,7 +429,7 @@ def browse_bs_app_results():
        bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':250})
        # TODO adjust file extensions
        for f in bs_files:
-           r.append('<li class="file ext_txt"><a href="confirm_analysis_inputs?file_num=' + f.Id + '" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')
+           r.append('<li class="file ext_txt"><a href="confirm_analysis_inputs?file_num=' + f.Id + '&app_result_num=' + result.Id + '" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')
 
     r.append('</ul>')
     return ''.join(r)

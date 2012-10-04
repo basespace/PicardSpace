@@ -5,11 +5,22 @@
   <h1>App Results</h1>
 </div>
 
-<p class="text-warning lead">Your Analysis Has Started</p>
+<p class="text-warning lead">{{=message}}</p>
 
 <!--{{=TABLE(*[TR(*rows) for rows in app_ssns])}}-->
 <table class="table table-bordered table-hover">
-{{for item in app_ssns:}}
-{{=TR(TD(item[0]), TD(item[1]), TD(item[2]), TD(item[3]), TD(A("Alignment Metrics", _href=URL('view_alignment_metrics', vars={'app_session_id': item[4]} ))), TD(item[5]), TD(item[6]))}}
+
+{{=TR(TH('AppResult Name'), TH('Sample Name'), TH('File Name'), TH('Project Name'), TH('Status'), TH('Results'), TH('Notes'), TH('Date Created'))}}
+
+{{for i in app_ssns:}}
+
+<!-- set row color based on status -->
+{{cls = 'warning'}}
+{{if i['status'] == 'complete': cls='success'}}
+{{if i['status'] == 'error': cls='warning'}}
+
+{{=TR(TD(i['app_result_name']), TD(i['sample_name']), TD(i['file_name']), TD(i['project_name']), TD(i['status']), TD(A("Alignment Metrics", _href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id']} ))), TD(i['notes']), TD(i['date_created']), _class=cls)
+}}
+
 {{pass}}
 </table>

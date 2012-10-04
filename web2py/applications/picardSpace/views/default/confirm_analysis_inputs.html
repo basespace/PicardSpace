@@ -4,15 +4,17 @@
 <div class="container">
 
   <form enctype="multipart/form-data"
-      action="{{=URL()}}" method="post">
+      action="{{=URL('get_auth_code')}}" method="post">
     <legend>Would you like to analyze this Sample?</legend>
-    <label>Sample name: TODO</label>
-    <label>BAM filename: {{=file_name}}</label>
+    <label>Sample: {{=sample_name}}</label>
+    <label>File: {{=file_name}}</label>
     <label>Project: {{=project_name}}</label>
     <label>Analysis name:</label>
-    <input type="text" placeholder="Picard Aln Metrics for TODO" />
+    <input type="text" name="app_result_name" value="Picard Aln Metrics for {{=sample_name}}" />
     <br/>
     <button type="submit" class="btn btn-primary btn-large">Launch Analysis</button>
 </form>
 
+<!--
 <b>{{=A(T("Analyze!"), _href=URL('get_auth_code'))}}</b>
+-->

@@ -247,6 +247,7 @@ db.define_table('app_result',
     Field('app_result_num'),
     # TODO should project_num be in both app_session and app_result?
     Field('project_num'),         # the project that contains this app result in BaseSpace
+    Field('sample_num'),
     Field('description'),
     Field('status'),
     Field('message'))
