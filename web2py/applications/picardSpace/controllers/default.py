@@ -10,20 +10,16 @@ from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
 from picardSpace import File
 
-# TODO store these here?
-#basespaceuser1 aTest-1 (app)
-client_id     = 'f4e812672009413d809b7caa31aae9b4'
-client_secret = 'a23bee7515a54142937d9eb56b7d6659'
-
-#esmith picardSpace app
-#client_id     = 'e9ac8de26ae74d2aa7ae313803dc0ca9'
-#client_secret = 'f7618095b46145a1bfbe9c4bca8aea38'
-#app_session_num = '57aa1ae5dc3d4d26b944d211fb63ff38'
-
-baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
-version       = 'v1pre3'
-
-
+# basespace.com, user basespaceuser1, app picardSpace
+client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
+client_secret  = 'af244c8c6a674e3fb6e5280605512393'
+baseSpaceUrl   = 'https://api.basespace.illumina.com/'
+version        = 'v1pre3'
+# cloud-endor, user basespaceuser1, app aTest-1
+#client_id     = 'f4e812672009413d809b7caa31aae9b4'
+#client_secret = 'a23bee7515a54142937d9eb56b7d6659'
+#baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
+#version       = 'v1pre3'
 
 
 def index():
@@ -50,8 +46,11 @@ def index():
         session.app_session_num = os.path.basename(appsessionuri)
          
         # exchange app session num for items the user pre-selected in BaseSpace
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,session.app_session_num)
-        app_ssn = bs_api.getAppSession()  
+        try:
+            bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,session.app_session_num)
+            app_ssn = bs_api.getAppSession()     
+        except Exception as e:
+            return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(str(e)))            
 
         # TODO iterate over all inputs and assemble into master scope string?
         ssn_ref = app_ssn.References[0]
@@ -71,11 +70,7 @@ def index():
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
-        redirect(user_now_logged_in())
-   
-    # TODO TEMP show app session num
-    if session.app_session_num:
-        err_msg += "(App session num is " + session.app_session_num + ")"
+        redirect(user_now_logged_in())       
             
     return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg))
 
@@ -106,36 +101,49 @@ def view_results():
     response.menu = False
     
     # if arriving from just-launched analysis, display msg 'just launched'
+    app_ssns = []
+    err_msg = ""
     message = ""
     if request.get_vars.message:
         message = request.get_vars.message
 
     # get BaseSpace API
     user_row = db(db.auth_user.id==auth.user_id).select().first()
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+    except Exception as e:
+        return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))
     
-    # get all app results for the current user
-    app_ssns = []
-    
+    # get all app results for the current user    
     ssn_rows = db(db.app_session.user_id==auth.user_id).select(orderby=~db.app_session.date_created)
     for ssn_row in ssn_rows:
         rslt_rows = db(db.app_result.app_session_id==ssn_row.id).select()
 
         # get project, sample, and file names for each AppResult    
         for rslt_row in rslt_rows:          
-            proj = bs_api.getProjectById(rslt_row.project_num)
+            try:
+                proj = bs_api.getProjectById(rslt_row.project_num)
+            except Exception as e:
+                return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                
             sample_name = "unknown"
+
             if (rslt_row.sample_num):
-                sample = bs_api.getSampleById(rslt_row.sample_num)
+                try:
+                    sample = bs_api.getSampleById(rslt_row.sample_num)
+                except Exception as e:
+                    return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                
                 sample_name = sample.Name
             
             # getting input BAM file here (restricted to single input file)
             file_row = db((db.bs_file.app_result_id==rslt_row.id) & (db.bs_file.io_type=='input')).select().first()
-            bs_file = bs_api.getFileById(file_row.file_num)
+            try:
+                bs_file = bs_api.getFileById(file_row.file_num)
+            except Exception as e:
+                return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'sample_name':sample_name, 'file_name':bs_file.Name, 'project_name':proj.Name, 'status':rslt_row.status, 'app_session_id':ssn_row.id, 'notes':rslt_row.message, 'date_created':ssn_row.date_created } )
         
-    return dict(message=T(message), app_ssns=app_ssns)
+    return dict(message=T(message), app_ssns=app_ssns, err_msg=T(err_msg))
 
     
 @auth.requires_login()
@@ -146,21 +154,27 @@ def view_alignment_metrics():
     response.menu = False
     app_session_id = request.get_vars.app_session_id
     
-    # get sample name
-    user_row = db(db.auth_user.id==auth.user_id).select().first()
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
-    ar_row = db(db.app_result.app_session_id==app_session_id).select().first()
-    sample_num = ar_row.sample_num
-    sample = bs_api.getSampleById(sample_num)
-    
-    f_row = db((db.bs_file.app_session_id==app_session_id)
-        & (db.bs_file.io_type=='output')).select().first()
-        # TODO select only AlignmentMetrics file, remove first()
-
+    # set var defaults
     hdr = ""
     aln_tbl = []
     tps_aln_tbl = [["data not available"]]
     file_name = "unknown"
+    
+    # get sample name
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    ar_row = db(db.app_result.app_session_id==app_session_id).select().first()
+    sample_num = ar_row.sample_num
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        sample = bs_api.getSampleById(sample_num)
+    except Exception as e:    
+        return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=T(str(e))))
+
+    # get output file info from db    
+    f_row = db((db.bs_file.app_session_id==app_session_id)
+        & (db.bs_file.io_type=='output')).select().first()
+        # TODO select only AlignmentMetrics file, remove first()
+
     if f_row:
         file_name = f_row.file_name
         
@@ -198,7 +212,7 @@ def view_alignment_metrics():
             tps_aln_tbl = zip(*aln_tbl)
 
     # TODO check that user is correct (could jump to this page as another user)
-    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name))
+    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=""))
 
 
 @auth.requires_login()
@@ -236,11 +250,14 @@ def choose_analysis_inputs():
 
     # get name of project from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
-    proj = bs_api.getProjectById(session.project_num)
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        proj = bs_api.getProjectById(session.project_num)
+    except Exception as e:
+        return dict(project_name="", err_msg=str(e))        
     project_name = proj.Name    
 
-    return dict(project_name=T(str(project_name)))
+    return dict(project_name=project_name, err_msg="")
 
 
 @auth.requires_login()
@@ -252,30 +269,29 @@ def confirm_analysis_inputs():
     
     # get file_num and app_result_num that user selected
     session.file_num = request.get_vars.file_num
-    orig_app_result_num = request.get_vars.app_result_num
-    
-    # TODO what do with orig app result num?
-    #session.orig_app_result_num = 9995
-    # project_num = 51
-    # session.file_num = 2351949
-    # TODO make these user inputs in the view?
-#    session.app_result_name = "Picard Alignment Metrics"
-#    session.app_result_description = "Picard aln QC"
+    orig_app_result_num = request.get_vars.app_result_num    
 
     # get name of file and project (and sample, future) from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
-    project = bs_api.getProjectById(session.project_num)
-    bs_file = bs_api.getFileById(session.file_num)
-    app_ssn = bs_api.getAppSession(session.app_session_num)
-    
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        project = bs_api.getProjectById(session.project_num)
+        bs_file = bs_api.getFileById(session.file_num)
+        app_ssn = bs_api.getAppSession(session.app_session_num)
+
+        app_result = bs_api.getAppResultById(orig_app_result_num)
+        samples_ids = app_result.getReferencedSamplesIds()    
+    except Exception as e:
+        return dict(sample_name="", file_name="", project_name="", err_msg=str(e))        
+
     # get sample num and name from AppResult, if present
-    app_result = bs_api.getAppResultById(orig_app_result_num)
-    samples_ids = app_result.getReferencedSamplesIds()
     sample_name = "unknown"
     if samples_ids:
         session.sample_num = samples_ids[0]
-        sample = bs_api.getSampleById(session.sample_num) 
+        try:
+            sample = bs_api.getSampleById(session.sample_num)
+        except Exception as e:
+            return dict(sample_name="", file_name="", project_name="", err_msg=str(e))               
         sample_name = sample.Name       
 
     # TODO skip this and depend on creating File in db in start_analysis()??
@@ -287,12 +303,7 @@ def confirm_analysis_inputs():
     session.return_url = 'start_analysis'
     session.scope = 'write'
 
-    return dict(project_num=T(str(session.project_num)),
-        file_num=T(str(session.file_num)),
-        # TODO above fields only needed for testing
-        sample_name=T(str(sample_name)),
-        file_name=T(str(bs_file.Name)),
-        project_name=T(str(project.Name)))        
+    return dict(sample_name=T(str(sample_name)), file_name=T(str(bs_file.Name)), project_name=T(str(project.Name)), err_msg="")        
 
 
 @auth.requires_login()
@@ -305,12 +316,16 @@ def get_auth_code():
         session.app_result_name = request.post_vars.app_result_name
     
     scope = session.scope + ' project ' + str(session.project_num)
+    # TODO remove hard-coded path
     redirect_uri = 'http://localhost:8000/picardSpace/default/get_access_token'
 
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num)
-    # TODO state needed here?
-    userUrl = bs_api.getWebVerificationCode(scope,redirect_uri,state=session.app_session_num)
-    redirect(userUrl)
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num)
+        # TODO state needed here?
+        userUrl = bs_api.getWebVerificationCode(scope,redirect_uri,state=session.app_session_num)
+    except Exception as e:
+        return dict(err_msg=str(e))
+    redirect(userUrl)    
 
 
 @auth.requires_login()
@@ -329,18 +344,23 @@ def get_access_token():
         
     # exchange authorization code for auth token
     app_session_num = session.app_session_num
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_session_num)
-    bs_api.updatePrivileges(auth_code)      
-    access_token =  bs_api.getAccessToken()      
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_session_num)
+        bs_api.updatePrivileges(auth_code)      
+        access_token =  bs_api.getAccessToken()      
+    except Exception as e:
+        return dict(err_msg=str(e))
 
     # ensure the current app user is the same as the current BaseSpace user        
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     cur_user_id = user_row.username
-    bs_user = bs_api.getUserById('current')
+    try:
+        bs_user = bs_api.getUserById('current')
+    except Exception as e:
+        return dict(err_msg=str(e))
+
     if (bs_user.Id != cur_user_id):
-        # TODO how to handle this error?
-        message = "Error - Current user_id is " + str(cur_user_id) + " while current BaseSpace user id is " +str(bs_user.Id)
-        return dict(message=T(message))
+        return dict(err_msg="Error - mismatch between PicardSpace user id of " + str(cur_user_id) + " and current BaseSpace user id of " + str(bs_user.Id) + ". Please re-login to PicardSpace.")
    
     # update user's access token in user table
     user_row.update_record(access_token=access_token)
@@ -357,12 +377,17 @@ def start_analysis():
     # get session id and current user id from db
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+
+    # TODO remove session.app_result_name and session.app_result_description?
                  
     # add new AppResult to BaseSpace
-    bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
-    project = bs_api.getProjectById(session.project_num)
-    sample = bs_api.getSampleById(session.sample_num)
-    app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+    try:
+        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        project = bs_api.getProjectById(session.project_num)
+        sample = bs_api.getSampleById(session.sample_num)
+        app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+    except Exception as e:
+        return dict(err_msg=str(e))
         
     # add new AppResult to db            
     app_result_id = db.app_result.insert(
@@ -401,9 +426,6 @@ def start_analysis():
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))
                               
-    message = "welcome back from getting your auth token: " + access_token + " - now we're getting actual BS data!"
-    return dict(message=T(message))
-
 
 def browse_bs_app_results():
     """
@@ -415,18 +437,26 @@ def browse_bs_app_results():
 
     # for current project, get all app results from BaseSpace        
     user_row = db(db.auth_user.id==auth.user_id).select().first()
-    bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
-    proj = bs_api.getProjectById(session.project_num)    
-    # only display first 10 AppResults
-#    app_results = proj.getAppResults(bs_api, myQp={'Limit':10})
-    app_results = proj.getAppResults(bs_api)
+    try:
+        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        proj = bs_api.getProjectById(session.project_num)    
+        # only display first 10 AppResults
+    #    app_results = proj.getAppResults(bs_api, myQp={'Limit':10})
+        app_results = proj.getAppResults(bs_api)
+    except Exception as e:
+        return '<p class="text-error">' + str(e) + '</p>'
+
     
     # now build html list
     r=['<ul class="jqueryFileTree" style="display: none;">']
     #r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/">' + proj.Name + '</a></li>')
     for result in app_results:
        r.append('<li class="directory collapsed"><a href="#" rel="' + proj.Name + '/' + result.Name + '/">' + result.Name + '</a></li>')
-       bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':250})
+       try:
+           bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':250})
+       except Exception as e:
+           return '<p class="text-error">' + str(e) + '</p>'
+       
        # TODO adjust file extensions
        for f in bs_files:
            r.append('<li class="file ext_txt"><a href="confirm_analysis_inputs?file_num=' + f.Id + '&app_result_num=' + result.Id + '" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')

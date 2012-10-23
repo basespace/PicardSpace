@@ -5,12 +5,13 @@
   <h1>{{=main_msg}}</h1>
   <p>{{=scnd_msg}}</p>
   <p>
-    <a class="btn btn-primary btn-large" href={{=URL('user/login')}}>
+    <a class="btn btn-primary btn-large" href='http://localhost:8000/picardSpace/default/user/login?_next=/picardSpace/default/user_now_logged_in'>
+    <!--<a class="btn btn-primary btn-large" href={{=URL('user/login')}}>Login</a>-->
       Login
     </a>
   </p>
 </div>
-<p>{{=err_msg}}</p>
+<p class="text-error">{{=err_msg}}</p>
 
 {{if 'message' in globals():}}
 {{=message}}

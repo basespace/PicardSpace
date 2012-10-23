@@ -5,10 +5,12 @@
   <h1>Choose Analysis Input</h1>
 </div>
 
+<p class="text-error lead">{{=err_msg}}</p>
+
 <p>Please select a BAM file to analyze:</p>
 
 <h3>BaseSpace Project '{{=project_name}}'</h3>
-(displaying the first 10 App Results)
+
 <div id="file_chooser">file_chooser</div>
 <!-- TODO added js here -->
 <script src="{{=URL('static','jqueryFileTree/jqueryFileTree.js')}}"></script>

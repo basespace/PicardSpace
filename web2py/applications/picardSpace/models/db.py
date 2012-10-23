@@ -61,11 +61,16 @@ auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
 
-#basespaceuser1 aTest-1 (app)
-client_id     = 'f4e812672009413d809b7caa31aae9b4'
-client_secret = 'a23bee7515a54142937d9eb56b7d6659'
-baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
-version       = 'v1pre3'
+# basespace.com, user basespaceuser1, app picardSpace
+client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
+client_secret  = 'af244c8c6a674e3fb6e5280605512393'
+baseSpaceUrl   = 'https://api.basespace.illumina.com/'
+version        = 'v1pre3'
+# cloud-endor, user basespaceuser1, app aTest-1
+#client_id     = 'f4e812672009413d809b7caa31aae9b4'
+#client_secret = 'a23bee7515a54142937d9eb56b7d6659'
+#baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
+#version       = 'v1pre3'
 
 
 # import OAuth2 account for authentication
@@ -78,7 +83,8 @@ class BaseSpaceAccount(OAuthAccount):
     """
     OAuth2 implementation for BaseSpace
     """
-    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
+    auth_url      = 'https://basespace.illumina.com/oauth/authorize'    
+#    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
     token_url      = baseSpaceUrl + version + '/oauthv2/token/'
     
     def __init__(self):
