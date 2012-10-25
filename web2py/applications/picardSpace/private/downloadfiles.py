@@ -25,15 +25,15 @@ while True:
 
         # download the file from BaseSpace
         try:
-            retval = als_file.download_and_analyze()
-        except:
-            # TODO print to log file?
+            als_file.download_and_analyze()
+        except Exception as e:
+            # TODO print to log file
             print "Error: {0}".format(str(e))
-        if retval:
-            row.update_record(status='complete')
-        else:
             row.update_record(status='error')
+        else:
+            row.update_record(status='complete')
         db.commit()
+
     time.sleep(5) # check every x seconds
 
 #python web2py.py -S picardSpace -M -N -R applications/picardSpace/private/downloadfiles.py

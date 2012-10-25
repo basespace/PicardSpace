@@ -2,19 +2,6 @@
 # coding: utf8
 from gluon import *
 
-#db = DAL('sqlite://storage.sqlite')
-
-# basespace.com, user basespaceuser1, app picardSpace
-client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
-client_secret  = 'af244c8c6a674e3fb6e5280605512393'
-baseSpaceUrl   = 'https://api.basespace.illumina.com/'
-version        = 'v1pre3'
-# cloud-endor, user basespaceuser1, app aTest-1
-#client_id     = 'f4e812672009413d809b7caa31aae9b4'
-#client_secret = 'a23bee7515a54142937d9eb56b7d6659'
-#baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
-#version       = 'v1pre3'
-
 import os.path
 from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
@@ -42,7 +29,8 @@ class File:
         user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
                         
         # get file info from BaseSpace
-        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        app = db(db.app_data.id > 0).select().first()
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
         f = bs_api.getFileById(file_num)
                         
         # create local_path dir if it doesn't exist   
@@ -71,10 +59,7 @@ class AnalysisInputFile(File):
         local_dir="applications/picardSpace/private/downloads/inputs/" + app_ssn_row.app_session_num + "/"        
 
         # download file from BaseSpace
-        try:
-            local_file = self.download_file(file_num=self.file_num, local_dir=local_dir)
-        except IOError as e:
-            return(False)
+        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir)
 
         # update file's local path
         file_row = db(db.bs_file.id==self.bs_file_id).select().first()     
@@ -83,7 +68,6 @@ class AnalysisInputFile(File):
         
         # add file to analysis queue
         db.analysis_queue.insert(status='pending', app_result_id=self.app_result_id)
-        return(True)
      
 
 class AnalysisFeedback:
@@ -163,7 +147,8 @@ class AppResult:
             # get BaseSpace API
             app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
             user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
-            bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+            app = db(db.app_data.id > 0).select().first()
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
             app_result = bs_api.getAppResultById(self.app_result_num)
             app_ssn = app_result.AppSession 
             app_ssn.setStatus(bs_api, bs_ssn_status, message)   
@@ -240,8 +225,9 @@ class AppResult:
         db = current.db
         # get BaseSpace API
         app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
-        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first() 
+        app = db(db.app_data.id > 0).select().first()       
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
         app_result = bs_api.getAppResultById(self.app_result_num)
         
         # upload files to BaseSpace

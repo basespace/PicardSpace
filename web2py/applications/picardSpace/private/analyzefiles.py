@@ -28,7 +28,7 @@ while True:
         try:
             fb = new_als.run_analysis_and_writeback(f)
         except Exception as e:
-            # TODO print to log file?
+            # TODO print to log file
             print "Error: {0}".format(str(e))
 
         # update analysis queue with analysis feedback

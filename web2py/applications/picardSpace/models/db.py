@@ -62,15 +62,26 @@ auth.settings.reset_password_requires_verification = True
 
 
 # basespace.com, user basespaceuser1, app picardSpace
-client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
-client_secret  = 'af244c8c6a674e3fb6e5280605512393'
-baseSpaceUrl   = 'https://api.basespace.illumina.com/'
-version        = 'v1pre3'
+#client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
+#client_secret  = 'af244c8c6a674e3fb6e5280605512393'
+#baseSpaceUrl   = 'https://api.basespace.illumina.com/'
+#version        = 'v1pre3'
 # cloud-endor, user basespaceuser1, app aTest-1
 #client_id     = 'f4e812672009413d809b7caa31aae9b4'
 #client_secret = 'a23bee7515a54142937d9eb56b7d6659'
 #baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
 #version       = 'v1pre3'
+
+db.define_table('app_data',
+    Field('client_id', default='771bb853e8a84daaa79c6ce0bcb2f8e5'),
+    Field('client_secret', default='af244c8c6a674e3fb6e5280605512393'),
+    Field('baseSpaceUrl', default='https://api.basespace.illumina.com/'),
+    Field('version', default='v1pre3'))
+
+# create an instance of app_data table if not present
+app_data = db(db.app_data.id > 0).select().first()
+if not app_data:
+    app_data = db.app_data.insert()
 
 
 # import OAuth2 account for authentication
@@ -83,15 +94,17 @@ class BaseSpaceAccount(OAuthAccount):
     """
     OAuth2 implementation for BaseSpace
     """
+    # TODO add below vars to app_data in db
     auth_url      = 'https://basespace.illumina.com/oauth/authorize'    
 #    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
-    token_url      = baseSpaceUrl + version + '/oauthv2/token/'
+    token_url      = 'https://api.basespace.illumina.com/v1pre3/oauthv2/token/'
     
     def __init__(self):
+        app = db(db.app_data.id > 0).select().first()
         OAuthAccount.__init__(self, 
             globals(),   # web2py keyword
-            client_id, 
-            client_secret,
+            app.client_id, 
+            app.client_secret,
             self.auth_url,
             self.token_url)            
             #state='user_login')
@@ -104,7 +117,8 @@ class BaseSpaceAccount(OAuthAccount):
             return None
 
         # TODO update when app session num is optional parameter
-        self.bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,"", self.accessToken())
+        app = db(db.app_data.id > 0).select().first()
+        self.bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,"", self.accessToken())
         
         user = None
         try:

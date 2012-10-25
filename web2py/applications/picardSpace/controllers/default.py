@@ -10,18 +10,6 @@ from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
 from picardSpace import File
 
-# basespace.com, user basespaceuser1, app picardSpace
-client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
-client_secret  = 'af244c8c6a674e3fb6e5280605512393'
-baseSpaceUrl   = 'https://api.basespace.illumina.com/'
-version        = 'v1pre3'
-# cloud-endor, user basespaceuser1, app aTest-1
-#client_id     = 'f4e812672009413d809b7caa31aae9b4'
-#client_secret = 'a23bee7515a54142937d9eb56b7d6659'
-#baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
-#version       = 'v1pre3'
-
-
 def index():
     """
     A user just launched the PicardSpace app
@@ -46,8 +34,9 @@ def index():
         session.app_session_num = os.path.basename(appsessionuri)
          
         # exchange app session num for items the user pre-selected in BaseSpace
+        app = db(db.app_data.id > 0).select().first()
         try:
-            bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,session.app_session_num)
+            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
             app_ssn = bs_api.getAppSession()     
         except Exception as e:
             return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(str(e)))            
@@ -109,8 +98,9 @@ def view_results():
 
     # get BaseSpace API
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
     except Exception as e:
         return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))
     
@@ -162,10 +152,12 @@ def view_alignment_metrics():
     
     # get sample name
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    ssn_row = db(db.app_session.id==app_session_id).select().first()
     ar_row = db(db.app_result.app_session_id==app_session_id).select().first()
     sample_num = ar_row.sample_num
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)        
         sample = bs_api.getSampleById(sample_num)
     except Exception as e:    
         return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=T(str(e))))
@@ -189,8 +181,8 @@ def view_alignment_metrics():
         local_dir="applications/picardSpace/private/downloads/viewing/" + str(f_row.app_session_id.app_session_num) + "/" 
         try:
             local_path = f.download_file(f_row.file_num, local_dir)
-        except:
-            return [["Error retrieving file from BaseSpace", "", ""]]
+        except Exception as e:
+            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=T(str(e))))
         
         # read local file into array (for display in view)
         with open( local_path, "r") as ALN_QC:
@@ -250,8 +242,9 @@ def choose_analysis_inputs():
 
     # get name of project from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(session.project_num)
     except Exception as e:
         return dict(project_name="", err_msg=str(e))        
@@ -273,8 +266,9 @@ def confirm_analysis_inputs():
 
     # get name of file and project (and sample, future) from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         project = bs_api.getProjectById(session.project_num)
         bs_file = bs_api.getFileById(session.file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
@@ -319,8 +313,9 @@ def get_auth_code():
     # TODO remove hard-coded path
     redirect_uri = 'http://localhost:8000/picardSpace/default/get_access_token'
 
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num)
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num)
         # TODO state needed here?
         userUrl = bs_api.getWebVerificationCode(scope,redirect_uri,state=session.app_session_num)
     except Exception as e:
@@ -344,8 +339,9 @@ def get_access_token():
         
     # exchange authorization code for auth token
     app_session_num = session.app_session_num
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version,app_session_num)
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,app_session_num)
         bs_api.updatePrivileges(auth_code)      
         access_token =  bs_api.getAccessToken()      
     except Exception as e:
@@ -381,8 +377,9 @@ def start_analysis():
     # TODO remove session.app_result_name and session.app_result_description?
                  
     # add new AppResult to BaseSpace
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id, client_secret, baseSpaceUrl, version, app_ssn_row.app_session_num, user_row.access_token)
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
         project = bs_api.getProjectById(session.project_num)
         sample = bs_api.getSampleById(session.sample_num)
         app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
@@ -437,12 +434,13 @@ def browse_bs_app_results():
 
     # for current project, get all app results from BaseSpace        
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(client_id,client_secret,baseSpaceUrl,version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(session.project_num)    
         # only display first 10 AppResults
-    #    app_results = proj.getAppResults(bs_api, myQp={'Limit':10})
-        app_results = proj.getAppResults(bs_api)
+        app_results = proj.getAppResults(bs_api, myQp={'Limit':10})
+        #app_results = proj.getAppResults(bs_api)
     except Exception as e:
         return '<p class="text-error">' + str(e) + '</p>'
 
