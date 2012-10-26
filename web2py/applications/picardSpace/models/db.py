@@ -61,22 +61,22 @@ auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
 
-# basespace.com, user basespaceuser1, app picardSpace
-#client_id      = '771bb853e8a84daaa79c6ce0bcb2f8e5'
-#client_secret  = 'af244c8c6a674e3fb6e5280605512393'
-#baseSpaceUrl   = 'https://api.basespace.illumina.com/'
-#version        = 'v1pre3'
 # cloud-endor, user basespaceuser1, app aTest-1
 #client_id     = 'f4e812672009413d809b7caa31aae9b4'
 #client_secret = 'a23bee7515a54142937d9eb56b7d6659'
 #baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
 #version       = 'v1pre3'
+#auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
+#token_url     =
 
+# basespace.com, user basespaceuser1, app picardSpace
 db.define_table('app_data',
     Field('client_id', default='771bb853e8a84daaa79c6ce0bcb2f8e5'),
     Field('client_secret', default='af244c8c6a674e3fb6e5280605512393'),
     Field('baseSpaceUrl', default='https://api.basespace.illumina.com/'),
-    Field('version', default='v1pre3'))
+    Field('version', default='v1pre3'),
+    Field('auth_url', default='https://basespace.illumina.com/oauth/authorize'),
+    Field('token_url', default='https://api.basespace.illumina.com/v1pre3/oauthv2/token/'))
 
 # create an instance of app_data table if not present
 app_data = db(db.app_data.id > 0).select().first()
@@ -94,19 +94,14 @@ class BaseSpaceAccount(OAuthAccount):
     """
     OAuth2 implementation for BaseSpace
     """
-    # TODO add below vars to app_data in db
-    auth_url      = 'https://basespace.illumina.com/oauth/authorize'    
-#    auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
-    token_url      = 'https://api.basespace.illumina.com/v1pre3/oauthv2/token/'
-    
     def __init__(self):
         app = db(db.app_data.id > 0).select().first()
         OAuthAccount.__init__(self, 
             globals(),   # web2py keyword
             app.client_id, 
             app.client_secret,
-            self.auth_url,
-            self.token_url)            
+            app.auth_url,
+            app.token_url)            
             #state='user_login')
             
     def get_user(self):
@@ -261,7 +256,7 @@ db.define_table('app_session',
     Field('user_id'), db.auth_user,
     Field('date_created')) 
 
-db.define_table('app_result',
+db.define_table('app_result',      # newly created AppResult for PicardSpace's output files
     Field('app_session_id', db.app_session),
     Field('app_result_name'),
     Field('app_result_num'),
@@ -274,7 +269,7 @@ db.define_table('app_result',
 
 db.define_table('bs_file',
     Field('app_result_id', db.app_result),
-    Field('app_session_id', db.app_session), # TODO should this be only on the app_result? Yes
+    #Field('app_session_id', db.app_session), # TODO should this be only on the app_result? Yes
     Field('file_num'),
     Field('file_name'),
     Field('local_path'),

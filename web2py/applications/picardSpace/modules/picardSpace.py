@@ -11,8 +11,7 @@ class File:
     """
     A File in BaseSpace
     """
-    def __init__(self, app_session_id, file_name, local_path, file_num=None, bs_file_id=None, app_result_id=None):              
-        self.app_session_id = app_session_id
+    def __init__(self, file_name, local_path, file_num=None, bs_file_id=None, app_result_id=None):              
         self.file_name = file_name
         self.local_path = local_path
         self.file_num = file_num        
@@ -25,7 +24,8 @@ class File:
         """     
         db = current.db
         # get access token for app session's user (can't use current user since accessing from cron script)
-        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        ar_row = db(db.app_result.id==self.app_result_id).select().first()
+        app_ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
         user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
                         
         # get file info from BaseSpace
@@ -52,7 +52,8 @@ class AnalysisInputFile(File):
         """           
         db = current.db  
         # get file and analysis info from database        
-        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        ar_row = db(db.app_result.id==self.app_result_id).select().first()
+        app_ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
         
         # set local_path location and url for downloading
         # TODO remove hard-coded path
@@ -91,7 +92,7 @@ class AppResult:
         self.app_result_num = app_result_num
         self.description = description
         self.status = status
-        self.message = message
+        self.message = message               
         
         self.output_files = []           
 
@@ -148,6 +149,7 @@ class AppResult:
             app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
             user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
             app = db(db.app_data.id > 0).select().first()
+            
             bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
             app_result = bs_api.getAppResultById(self.app_result_num)
             app_ssn = app_result.AppSession 
@@ -178,8 +180,7 @@ class AppResult:
         
         # add output file to writeback list
         if (os.path.exists(output_path)):           
-            f = File(app_session_id=self.app_session_id,
-                app_result_id=self.app_result_id,
+            f = File(app_result_id=self.app_result_id,
                 file_name=aln_met_name,
                 local_path=output_path)
             self.output_files.append(f)
@@ -197,12 +198,10 @@ class AppResult:
         F_STDERR.close()
         
         # add stdout and stderr to write-back queue
-        f_stdout = File(app_session_id=self.app_session_id,
-                app_result_id=self.app_result_id,
+        f_stdout = File(app_result_id=self.app_result_id,
                 file_name=stdout_name,
                 local_path=stdout_path)        
-        f_stderr = File(app_session_id=self.app_session_id,
-                app_result_id=self.app_result_id,
+        f_stderr = File(app_result_id=self.app_result_id,
                 file_name=stderr_name,
                 local_path=stderr_path)        
         # TODO API choking with 400 code when uploading empty file -- how to handle this?
@@ -237,7 +236,7 @@ class AppResult:
             bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
                 
             # add file to local db
-            bs_file_id = db.bs_file.insert(app_session_id=f.app_session_id,
+            bs_file_id = db.bs_file.insert(
                     app_result_id=f.app_result_id,
                     file_num=bs_file.Id, 
                     file_name=f.file_name, 

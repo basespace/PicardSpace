@@ -18,7 +18,7 @@ while True:
         als_file = AnalysisInputFile(
             app_result_id=f_row.app_result_id,
             bs_file_id=f_row.id,
-            app_session_id=f_row.app_session_id,
+            #app_session_id=f_row.app_session_id,
             file_num=f_row.file_num,
             file_name=f_row.file_name,
             local_path=f_row.local_path)
