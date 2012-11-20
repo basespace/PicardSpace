@@ -21,18 +21,19 @@ response.generic_patterns = ['*'] if request.is_local else []
 ## (more options discussed in gluon/tools.py)
 #########################################################################
 
-from gluon.tools import Auth, Crud, Service, PluginManager, prettydate
-auth = Auth(db, hmac_key=Auth.get_or_create_key())
-crud, service, plugins = Crud(db), Service(), PluginManager()
+from gluon.tools import Auth
+auth = Auth(db)
 
 auth_table = db.define_table(
            auth.settings.table_user_name,
-           Field('first_name', length=128, default=""),
-           Field('last_name', length=128, default=""),
-           Field('username', length=128, default=""),   #, unique=True),
+           Field('first_name', length=128, default=""), # 'first_name' needed for name display in UI
+           Field('email', length=128, default=""),
+           Field('username', length=128, default=""),   # reqd by web2py
            #Field('password', 'password', length=256, readable=False, label='Password'),
            Field('access_token', length=128, default=""),
-           Field('registration_key', length=128, default= "", writable=False, readable=False))
+           Field('registration_key', length=512, default= "", writable=False, readable=False),
+           #Field('reset_password_key', length=512, default= "", writable=False, readable=False),
+           Field('registration_id', length=512, default= "", writable=False, readable=False)) # needed by web2py
 
 auth_table.username.requires = IS_NOT_IN_DB(db, auth_table.username)
 
@@ -124,7 +125,7 @@ class BaseSpaceAccount(object):
 
         if user:
             return dict(first_name = user.Name,
-                        last_name = user.Email,
+                        email = user.Email,
                         username = user.Id,
                         access_token = self.accessToken())
 

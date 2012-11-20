@@ -36,4 +36,4 @@ while True:
 
     time.sleep(5) # check every x seconds
 
-#python web2py.py -S picardSpace -M -N -R applications/picardSpace/private/downloadfiles.py
+#python web2py.py -S picardSpace -M -R applications/picardSpace/private/downloadfiles.py
