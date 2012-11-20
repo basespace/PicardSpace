@@ -160,10 +160,10 @@ def view_alignment_metrics():
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)        
         sample = bs_api.getSampleById(sample_num)
     except Exception as e:    
-        return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=T(str(e))))
+        return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name="", file_name=file_name, err_msg=T(str(e))))
 
     # get output file info from db    
-    f_row = db((db.bs_file.app_session_id==app_session_id)
+    f_row = db((db.bs_file.app_result_id==ar_row.id)
         & (db.bs_file.io_type=='output')).select().first()
         # TODO select only AlignmentMetrics file, remove first()
 
@@ -171,14 +171,14 @@ def view_alignment_metrics():
         file_name = f_row.file_name
         
         # create file object
-        f = File(app_session_id=f_row.app_session_id,
+        f = File(app_result_id=f_row.app_result_id,
                 file_name=f_row.file_name,
                 local_path=None,
                 file_num=f_row.file_num)
         
         # download file from BaseSpace
         # TODO remove hard-coded path
-        local_dir="applications/picardSpace/private/downloads/viewing/" + str(f_row.app_session_id.app_session_num) + "/" 
+        local_dir="applications/picardSpace/private/downloads/viewing/" + str(ssn_row.app_session_num) + "/" 
         try:
             local_path = f.download_file(f_row.file_num, local_dir)
         except Exception as e:
@@ -406,7 +406,7 @@ def start_analysis():
     # add input BAM file to db
     bs_file_id = db.bs_file.insert(
         app_result_id=app_result_id,
-        app_session_id=app_ssn_row.id,
+        #app_session_id=app_ssn_row.id,
         file_num=app_ssn_row.file_num, 
         io_type="input")
         

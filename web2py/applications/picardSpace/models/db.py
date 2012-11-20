@@ -84,26 +84,26 @@ if not app_data:
     app_data = db.app_data.insert()
 
 
-# import OAuth2 account for authentication
-from gluon.contrib.login_methods.oauth20_account import OAuthAccount
+
 import json
 from urllib import urlencode
 
-
-class BaseSpaceAccount(OAuthAccount):
+class BaseSpaceAccount(object):
     """
     OAuth2 implementation for BaseSpace
     """
     def __init__(self):
         app = db(db.app_data.id > 0).select().first()
-        OAuthAccount.__init__(self, 
-            globals(),   # web2py keyword
-            app.client_id, 
-            app.client_secret,
-            app.auth_url,
-            app.token_url)            
-            #state='user_login')
-            
+
+        self.globals = globals()
+        self.client_id = app.client_id
+        self.client_secret = app.client_secret
+        self.request = self.globals['request']
+        self.session = self.globals['session']
+        self.auth_url = app.auth_url
+        self.token_url = app.token_url
+        self.args = None
+
     def get_user(self):
         """
         Returns the user using the BaseSpace API            
@@ -159,7 +159,7 @@ class BaseSpaceAccount(OAuthAccount):
                         redirect_uri=self.session.redirect_uri,
                         response_type='token', code=self.session.code,
                         grant_type='authorization_code')
-                        # TODO added grant_type
+                        # BaseSpace mod: added grant_type
 
 
             if self.args:
@@ -175,7 +175,7 @@ class BaseSpaceAccount(OAuthAccount):
 
             if open_url:
                 try:
-                    # TODO modifying here- BS uses json, old code used query str
+                    # BaseSpace mod: BS uses json, old code used query str
                     tokendata = json.loads(open_url.read())
                     self.session.token = tokendata
                     #test2 = open_url.read()
@@ -188,9 +188,9 @@ class BaseSpaceAccount(OAuthAccount):
                         exps = 'expires_in'
                     else:
                         exps = 'expires'
-# TODO editing expires since BaseSpace doesn't return this
-#                    self.session.token['expires'] = int(self.session.token[exps]) + \
-#                        time.time()
+                    # BaseSpace mod: editing expires since BaseSpace doesn't return this
+                    #self.session.token['expires'] = int(self.session.token[exps]) + \
+                        #time.time()
                     self.session.token['expires'] = 0
 
 
@@ -224,7 +224,7 @@ class BaseSpaceAccount(OAuthAccount):
                 data = dict(redirect_uri=self.session.redirect_uri,
                                   response_type='code',
                                   client_id=self.client_id)
-                # TODO adding scope for project browse in addtn to login
+                # BaseSpace mod: adding scope for project browse in addtn to login
                 if self.session.scope:
                     data['scope'] = self.session.scope
 
@@ -242,9 +242,39 @@ class BaseSpaceAccount(OAuthAccount):
         return None
 
 
+    ### methods below here not modified for BaseSpace
+
+    def __redirect_uri(self, next=None):
+        """Build the uri used by the authenticating server to redirect
+        the client back to the page originating the auth request.
+        Appends the _next action to the generated url so the flows continues.
+        """
+
+        r = self.request
+        http_host=r.env.http_x_forwarded_for
+        if not http_host: http_host=r.env.http_host
+
+        url_scheme = r.env.wsgi_url_scheme
+        if next:
+            path_info = next
+        else:
+            path_info = r.env.path_info
+        uri = '%s://%s%s' %(url_scheme, http_host, path_info)
+        if r.get_vars and not next:
+            uri += '?' + urlencode(r.get_vars)
+        return uri
+
+
+    def login_url(self, next="/"):
+        self.__oauth_login(next)
+        return next
+
+    def logout_url(self, next="/"):
+        del self.session.token
+        return next
+
 
 auth.settings.login_form=BaseSpaceAccount()
-#from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 
 
 
