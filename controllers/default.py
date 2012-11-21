@@ -178,7 +178,7 @@ def view_alignment_metrics():
         
         # download file from BaseSpace
         # TODO remove hard-coded path
-        local_dir="applications/picardSpace/private/downloads/viewing/" + str(ssn_row.app_session_num) + "/" 
+        local_dir="applications/PicardSpace/private/downloads/viewing/" + str(ssn_row.app_session_num) + "/" 
         try:
             local_path = f.download_file(f_row.file_num, local_dir)
         except Exception as e:
@@ -311,7 +311,7 @@ def get_auth_code():
     
     scope = session.scope + ' project ' + str(session.project_num)
     # TODO remove hard-coded path
-    redirect_uri = 'http://localhost:8000/picardSpace/default/get_access_token'
+    redirect_uri = 'http://localhost:8000/PicardSpace/default/get_access_token'
 
     app = db(db.app_data.id > 0).select().first()
     try:

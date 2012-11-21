@@ -57,7 +57,7 @@ class AnalysisInputFile(File):
         
         # set local_path location and url for downloading
         # TODO remove hard-coded path
-        local_dir="applications/picardSpace/private/downloads/inputs/" + app_ssn_row.app_session_num + "/"        
+        local_dir="applications/PicardSpace/private/downloads/inputs/" + app_ssn_row.app_session_num + "/"        
 
         # download file from BaseSpace
         local_file = self.download_file(file_num=self.file_num, local_dir=local_dir)
@@ -169,10 +169,10 @@ class AppResult:
         
         #output_file = local_path + ".alignment_metrics.txt"
         command = ["java", "-jar", 
-            "applications/picardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", 
+            "applications/PicardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", 
             "INPUT=" + input_path, 
             "OUTPUT=" + output_path, 
-            #"REFERENCE_SEQUENCE=applications/picardSpace/private/genome.fa",
+            #"REFERENCE_SEQUENCE=applications/PicardSpace/private/genome.fa",
             "VALIDATION_STRINGENCY=LENIENT",
             "ASSUME_SORTED=true"]
         p = Popen(command, stdout=PIPE, stderr=PIPE)
