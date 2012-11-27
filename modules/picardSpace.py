@@ -39,7 +39,7 @@ class File:
 
         # write downloaded data to new file
         f.downloadFile(bs_api,local_dir)
-        return(local_dir + f.Name)
+        return(os.path.join(local_dir, f.Name))
         
     
 class AnalysisInputFile(File):
@@ -56,8 +56,7 @@ class AnalysisInputFile(File):
         app_ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
         
         # set local_path location and url for downloading
-        # TODO remove hard-coded path
-        local_dir="applications/PicardSpace/private/downloads/inputs/" + app_ssn_row.app_session_num + "/"        
+        local_dir = os.path.join(current.request.folder, "private", "downloads", "inputs", str(app_ssn_row.app_session_num))
 
         # download file from BaseSpace
         local_file = self.download_file(file_num=self.file_num, local_dir=local_dir)
@@ -161,7 +160,9 @@ class AppResult:
         Run picard's CollectAlignmentSummaryMetics on a BAM file       
         """                
         input_path = input_file.local_path
-        
+        db = current.db                
+        app = db(db.app_data.id > 0).select().first()
+
         # assemble picard command and run it
         (dirname, file_name) = os.path.split(input_path)
         aln_met_name = file_name + ".AlignmentMetrics.txt"
@@ -169,7 +170,7 @@ class AppResult:
         
         #output_file = local_path + ".alignment_metrics.txt"
         command = ["java", "-jar", 
-            "applications/PicardSpace/private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar", 
+            os.path.join(current.request.folder, app.picard_exe),
             "INPUT=" + input_path, 
             "OUTPUT=" + output_path, 
             #"REFERENCE_SEQUENCE=applications/PicardSpace/private/genome.fa",

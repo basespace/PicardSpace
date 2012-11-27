@@ -60,8 +60,15 @@ def index():
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
         redirect(user_now_logged_in())       
-            
-    return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg))
+
+    # construct login_url for login link
+    # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'
+    if re.match(request.env.http_host, "localhost"):
+        login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True, port=8000)
+    else:
+        login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True)
+                                    
+    return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg), login_url=login_url)
 
 
 @auth.requires_login()
@@ -177,8 +184,7 @@ def view_alignment_metrics():
                 file_num=f_row.file_num)
         
         # download file from BaseSpace
-        # TODO remove hard-coded path
-        local_dir="applications/PicardSpace/private/downloads/viewing/" + str(ssn_row.app_session_num) + "/" 
+        local_dir=os.path.join(request.folder, "private", "downloads", "viewing", str(ssn_row.app_session_num))         
         try:
             local_path = f.download_file(f_row.file_num, local_dir)
         except Exception as e:
@@ -310,14 +316,17 @@ def get_auth_code():
         session.app_result_name = request.post_vars.app_result_name
     
     scope = session.scope + ' project ' + str(session.project_num)
-    # TODO remove hard-coded path
-    redirect_uri = 'http://localhost:8000/PicardSpace/default/get_access_token'
+    
+    # if on localhost, add port 8000 since likely using web2py Rocket server
+    if re.match(request.env.http_host, "localhost"):
+        redirect_uri = URL('get_access_token', scheme=True, host=True, port=8000)
+    else:
+        redirect_uri = URL('get_access_token', scheme=True, host=True)
 
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num)
-        # TODO state needed here?
-        userUrl = bs_api.getWebVerificationCode(scope,redirect_uri,state=session.app_session_num)
+        userUrl = bs_api.getWebVerificationCode(scope,redirect_uri)
     except Exception as e:
         return dict(err_msg=str(e))
     redirect(userUrl)    
@@ -328,16 +337,13 @@ def get_access_token():
     """
     Given an authorization code, exchange this for an access token
     """
-    # get authorization code from response url
+    # handle api errors
     if (request.get_vars.error):
         message = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_message)
-        return dict(message=T(message))
-        
-    # record auth_code and app session num from 'state' to connect scope request with auth token (getting next)
-    auth_code = request.get_vars.code
-    #f = request.get_vars.state
+        return dict(message=T(message))            
         
     # exchange authorization code for auth token
+    auth_code = request.get_vars.code
     app_session_num = session.app_session_num
     app = db(db.app_data.id > 0).select().first()
     try:

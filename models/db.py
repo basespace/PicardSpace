@@ -70,6 +70,7 @@ auth.settings.reset_password_requires_verification = True
 #auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
 #token_url     =
 
+# define app data - NOTE if changing any defaults, must manually deleted existing db entry
 # basespace.com, user basespaceuser1, app picardSpace
 db.define_table('app_data',
     Field('client_id', default='771bb853e8a84daaa79c6ce0bcb2f8e5'),
@@ -77,7 +78,8 @@ db.define_table('app_data',
     Field('baseSpaceUrl', default='https://api.basespace.illumina.com/'),
     Field('version', default='v1pre3'),
     Field('auth_url', default='https://basespace.illumina.com/oauth/authorize'),
-    Field('token_url', default='https://api.basespace.illumina.com/v1pre3/oauthv2/token/'))
+    Field('token_url', default='https://api.basespace.illumina.com/v1pre3/oauthv2/token/'),
+    Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
 
 # create an instance of app_data table if not present
 app_data = db(db.app_data.id > 0).select().first()
