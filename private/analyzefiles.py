@@ -23,7 +23,6 @@ while True:
             project_num=ar_row.project_num,
             app_result_name=ar_row.app_result_name,
             app_result_num=ar_row.app_result_num,
-            description=ar_row.description,
             status=ar_row.status)
         # run analysis and writeback results to BaseSpace
         try:

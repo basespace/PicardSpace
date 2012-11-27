@@ -83,13 +83,12 @@ class AppResult:
     """
     An App Result in BaseSpace
     """
-    def __init__(self, app_result_id, app_session_id, project_num, app_result_name, description, app_result_num, status="new", message=""):
+    def __init__(self, app_result_id, app_session_id, project_num, app_result_name, app_result_num, status="new", message=""):
         self.app_result_id = app_result_id 
         self.app_session_id = app_session_id
         self.project_num = project_num
         self.app_result_name = app_result_name
         self.app_result_num = app_result_num
-        self.description = description
         self.status = status
         self.message = message               
         

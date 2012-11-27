@@ -284,8 +284,6 @@ auth.settings.login_form=BaseSpaceAccount()
 db.define_table('app_session',
     Field('app_session_num'),
     Field('project_num'),          # the BaseSpace project to write-back results
-    # TODO move file_num to app_result?
-    Field('file_num'),             # the BaseSpace file that was analyzed
     Field('user_id'), db.auth_user,
     Field('date_created')) 
 
@@ -293,16 +291,13 @@ db.define_table('app_result',      # newly created AppResult for PicardSpace's o
     Field('app_session_id', db.app_session),
     Field('app_result_name'),
     Field('app_result_num'),
-    # TODO should project_num be in both app_session and app_result?
     Field('project_num'),         # the project that contains this app result in BaseSpace
     Field('sample_num'),
-    Field('description'),
     Field('status'),
     Field('message'))
 
 db.define_table('bs_file',
     Field('app_result_id', db.app_result),
-    #Field('app_session_id', db.app_session), # TODO should this be only on the app_result? Yes
     Field('file_num'),
     Field('file_name'),
     Field('local_path'),

@@ -54,7 +54,6 @@ def index():
             # create app_session in db
             app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
                 project_num=session.project_num,
-                #user_id=auth.user_id,
                 date_created=app_ssn.DateCreated) 
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
@@ -292,12 +291,7 @@ def confirm_analysis_inputs():
             sample = bs_api.getSampleById(session.sample_num)
         except Exception as e:
             return dict(sample_name="", file_name="", project_name="", err_msg=str(e))               
-        sample_name = sample.Name       
-
-    # TODO skip this and depend on creating File in db in start_analysis()??
-    # update app session with user's file choice
-    app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
-    app_ssn_row.update_record(file_num=session.file_num)
+        sample_name = sample.Name           
 
     # set scope for getting access token and url to redirect to afterwards
     session.return_url = 'start_analysis'
@@ -380,7 +374,7 @@ def start_analysis():
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
 
-    # TODO remove session.app_result_name and session.app_result_description?
+    # TODO remove session.app_result_name?
                  
     # add new AppResult to BaseSpace
     app = db(db.app_data.id > 0).select().first()
@@ -388,7 +382,7 @@ def start_analysis():
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
         project = bs_api.getProjectById(session.project_num)
         sample = bs_api.getSampleById(session.sample_num)
-        app_result = project.createAppResult(bs_api, session.app_result_name, session.app_result_description, appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+        app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
         
@@ -399,21 +393,14 @@ def start_analysis():
         app_result_name=session.app_result_name,
         app_result_num=app_result.Id,
         sample_num=session.sample_num,
-        description=session.app_result_description,
         status="queued for download",
         message="none")      
-    db.commit()
-
-    # update app session with user id
-    # TODO include user_id when creating app session in db (above)?
-    #app_ssn_row.update_record(user_id=user_row.id)
-    #db.commit()
+    db.commit()    
 
     # add input BAM file to db
     bs_file_id = db.bs_file.insert(
         app_result_id=app_result_id,
-        #app_session_id=app_ssn_row.id,
-        file_num=app_ssn_row.file_num, 
+        file_num=session.file_num, 
         io_type="input")
         
     # add App Result to download queue
@@ -424,7 +411,6 @@ def start_analysis():
     session.project_num = None
     session.scope = None  
     session.app_result_name = None
-    session.app_result_description = None                                
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))
