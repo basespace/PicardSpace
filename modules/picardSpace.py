@@ -5,6 +5,7 @@ from gluon import *
 import os.path
 from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
+import shutil
 
 
 class File:
@@ -75,7 +76,7 @@ class AnalysisFeedback:
     Records status and error messages of an Analysis
     """
     def __init__(self, status, message):               
-        self.status = status # TODO allow only 'complete', 'error', ?
+        self.status = status
         self.message = message
 
 
@@ -106,13 +107,13 @@ class AppResult:
         message = "analysis successful"
         try:
             if not (self._run_picard(input_file=input_file)):
-                message = "analysis failed"
+                message = "analysis Failed"
         except IOError as e:
             message = "Error in local file I/O (error number {0}): {1}".format(e.errno, e)
-            self._update_status('analysis error', message, 'Error')
+            self._update_status('analysis Error', message, 'Error')
         except:        
             message = "Picard analysis failed -- see stderr.txt file for more information."
-            self._update_status('analysis error', message, 'Error')
+            self._update_status('analysis Error', message, 'Error')
         else:
             self._update_status("writing back", message)
        
@@ -120,11 +121,21 @@ class AppResult:
             try:
                 self._writeback_app_result_files()
             except Exception as e:
-                message += "; writeback error: {0}".format(str(e))
-                self._update_status('analysis successful, writeback error', message, 'Error')
+                message += "; Error with writeback: {0}".format(str(e))
+                self._update_status('analysis successful, writeback Error', message, 'Error')
             else:
                 message += "; write-back successful"
-                self._update_status('complete', message, 'Complete')
+                self._update_status('deleting local files', message)
+                
+                # delete local files                
+                try:
+                    shutil.rmtree(os.path.dirname(input_file.local_path))
+                except Exception as e:
+                    message += "; Error deleting local files: {0}".format(str(e))
+                    self._update_status('analysis successful, writeback successful, Error deleting local files', message, 'Error')
+                else:
+                    message += "; deleted local files"
+                    self._update_status('complete', message, 'Complete')
             
         return AnalysisFeedback(self.status, message)
 
@@ -167,7 +178,6 @@ class AppResult:
         aln_met_name = file_name + ".AlignmentMetrics.txt"
         output_path = os.path.join(dirname, aln_met_name)
         
-        #output_file = local_path + ".alignment_metrics.txt"
         command = ["java", "-jar", 
             os.path.join(current.request.folder, app.picard_exe),
             "INPUT=" + input_path, 
@@ -178,8 +188,8 @@ class AppResult:
         p = Popen(command, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate()
         
-        # add output file to writeback list
-        if (os.path.exists(output_path)):           
+        # add output file to writeback list, if output file has non-zero size
+        if (os.path.exists(output_path) and os.path.getsize(output_path)):           
             f = File(app_result_id=self.app_result_id,
                 file_name=aln_met_name,
                 local_path=output_path)
@@ -198,19 +208,21 @@ class AppResult:
         F_STDERR.close()
         
         # add stdout and stderr to write-back queue
-        f_stdout = File(app_result_id=self.app_result_id,
+        # but don't upload empty files since API currently chokes on these
+        if os.path.getsize(stdout_path):
+            f_stdout = File(app_result_id=self.app_result_id,
                 file_name=stdout_name,
                 local_path=stdout_path)        
-        f_stderr = File(app_result_id=self.app_result_id,
+            self.output_files.append(f_stdout)
+            
+        if os.path.getsize(stderr_path):                    
+            f_stderr = File(app_result_id=self.app_result_id,
                 file_name=stderr_name,
-                local_path=stderr_path)        
-        # TODO API choking with 400 code when uploading empty file -- how to handle this?
-        #self.output_files.append(f_stdout)
-        # TODO instead of writing stderr file to BS, use error mechanism as described in API?
-        self.output_files.append(f_stderr)
+                local_path=stderr_path)                                
+            self.output_files.append(f_stderr)
         
         # return true if picard return code was successful
-        # TODO handle returncode=None, which means process is still running
+        # note: not handling returncode=None, which means process is still running
         if (p.returncode == 0):
             return(True)
         else:
@@ -232,7 +244,7 @@ class AppResult:
         # upload files to BaseSpace
         for f in self.output_files:
 
-            # TODO add dir name to write to?
+            # currently not using a dir name to write to
             bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
                 
             # add file to local db

@@ -54,15 +54,18 @@ def index():
             # create app_session in db
             app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
                 project_num=session.project_num,
-                date_created=app_ssn.DateCreated) 
+                date_created=app_ssn.DateCreated)
+                
+            # user should already be logged into BaseSpace, so redirect to logged-in screen
+            redirect(user_now_logged_in())
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
         redirect(user_now_logged_in())       
 
     # construct login_url for login link
-    # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'
-    if re.match(request.env.http_host, "localhost"):
+    # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'    
+    if (request.is_local):
         login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True, port=8000)
     else:
         login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True)
@@ -239,9 +242,8 @@ def choose_analysis_inputs():
     Offers the user choice of files to analyze
     """
     response.menu = False
-    # TODO handle no pre-selected items from app_session_num?
 
-    # get project to select items from
+    # get project context that user launched from BaseSpace
     app_session_num = session.app_session_num
     project_num = session.project_num
 
@@ -305,14 +307,14 @@ def get_auth_code():
     """
     Given an app session number, exchange this via BaseSpace API for item names to analyze
     """                    
-    # TODO get post var 'appresult_name', if present, and store in db
+    # record post var 'appresult_name', if present, in session var
     if (request.post_vars.app_result_name):
         session.app_result_name = request.post_vars.app_result_name
     
     scope = session.scope + ' project ' + str(session.project_num)
     
-    # if on localhost, add port 8000 since likely using web2py Rocket server
-    if re.match(request.env.http_host, "localhost"):
+    # if on localhost, add port 8000 since likely using web2py Rocket server    
+    if (request.is_local):
         redirect_uri = URL('get_access_token', scheme=True, host=True, port=8000)
     else:
         redirect_uri = URL('get_access_token', scheme=True, host=True)
@@ -373,8 +375,6 @@ def start_analysis():
     # get session id and current user id from db
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
-
-    # TODO remove session.app_result_name?
                  
     # add new AppResult to BaseSpace
     app = db(db.app_data.id > 0).select().first()

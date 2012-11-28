@@ -7,20 +7,8 @@ current.db = db
 ## by default give a view/generic.extension to all actions from localhost
 ## none otherwise. a pattern can be 'controller/function.extension'
 response.generic_patterns = ['*'] if request.is_local else []
-## (optional) optimize handling of static files
-# response.optimize_css = 'concat,minify,inline'
-# response.optimize_js = 'concat,minify,inline'
 
-#########################################################################
-## Here is sample code if you need for
-## - email capabilities
-## - authentication (registration, login, logout, ... )
-## - authorization (role based authorization)
-## - services (xml, csv, json, xmlrpc, jsonrpc, amf, rss)
-## - old style crud actions
-## (more options discussed in gluon/tools.py)
-#########################################################################
-
+# define authentication table and setting
 from gluon.tools import Auth
 auth = Auth(db)
 
@@ -29,15 +17,13 @@ auth_table = db.define_table(
            Field('first_name', length=128, default=""), # 'first_name' needed for name display in UI
            Field('email', length=128, default=""),
            Field('username', length=128, default=""),   # reqd by web2py
-           #Field('password', 'password', length=256, readable=False, label='Password'),
            Field('access_token', length=128, default=""),
            Field('registration_key', length=512, default= "", writable=False, readable=False),
-           #Field('reset_password_key', length=512, default= "", writable=False, readable=False),
            Field('registration_id', length=512, default= "", writable=False, readable=False)) # needed by web2py
 
 auth_table.username.requires = IS_NOT_IN_DB(db, auth_table.username)
 
-## create all tables needed by auth if not custom tables
+# create all tables needed by auth if not custom tables
 auth.define_tables()
 
 # disable auth actions not wanted
@@ -53,22 +39,11 @@ auth.settings.actions_disabled.append('groups')
 # set page that user sees after logging in
 auth.settings.login_next = URL('user_now_logged_in')
 
-#auth.settings.on_failed_authorization = URL('index')
-#auth.settings.on_failed_authentication = URL('index')
-
 ## configure auth policy
 auth.settings.registration_requires_verification = False
 auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
-
-# cloud-endor, user basespaceuser1, app aTest-1
-#client_id     = 'f4e812672009413d809b7caa31aae9b4'
-#client_secret = 'a23bee7515a54142937d9eb56b7d6659'
-#baseSpaceUrl  = 'https://api.cloud-endor.illumina.com/'
-#version       = 'v1pre3'
-#auth_url      = 'https://cloud-endor.illumina.com/oauth/authorize'    
-#token_url     =
 
 # define app data - NOTE if changing any defaults, must manually deleted existing db entry
 # basespace.com, user basespaceuser1, app picardSpace
@@ -87,7 +62,8 @@ if not app_data:
     app_data = db.app_data.insert()
 
 
-
+# define class for web2py login with BaseSpace credentials 
+# used only at initial log-in, not for other BaseSpace Oauth2 requests
 import json
 from urllib import urlencode
 
@@ -276,11 +252,11 @@ class BaseSpaceAccount(object):
         del self.session.token
         return next
 
-
+# instantiate Oauth2 login form
 auth.settings.login_form=BaseSpaceAccount()
 
 
-
+# define db tables
 db.define_table('app_session',
     Field('app_session_num'),
     Field('project_num'),          # the BaseSpace project to write-back results
