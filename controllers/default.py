@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import urllib
-import urllib2
-import base64
-import gluon.contrib.simplejson as json
-from urlparse import urlparse
 import os.path
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
 from picardSpace import File
+import shutil
 
 def index():
     """
@@ -23,7 +19,8 @@ def index():
     session.app_session_num = None
     session.project_num = None
     session.scope = None
-
+    session.app_result_name = None
+    
     main_msg = 'Welcome to PicardSpace'
     scnd_msg = 'Please log in'
     err_msg  = ''
@@ -82,13 +79,17 @@ def user_now_logged_in():
     if (not session.app_session_num):
         redirect(URL('view_results'))
     else:
-        # an app session num was provided, now ask BaseSpace which item(s) the users selected        
-        # update app session with user info
+        # an app session num was provided, update app session with user info
         app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
         app_ssn_row.update_record(user_id=auth.user_id)
 
-        redirect(URL('confirm_session_token'))
-    return dict(message=T(message))
+        # get and record access_token for pre-selected item (e.g. Project)
+        # if user already granted access, no oauth dialog will show
+        session.return_url = 'choose_analysis_inputs'
+        session.scope = 'read'
+        redirect(URL('get_auth_code'))
+
+        return dict(message=T(message))
 
 
 @auth.requires_login()
@@ -210,31 +211,16 @@ def view_alignment_metrics():
 
             # transpose list (for viewing - so it is long instead of wide)(now its a tuple)
             tps_aln_tbl = zip(*aln_tbl)
+            
+        # delete local files
+        try:
+            shutil.rmtree(os.path.dirname(local_path))            
+        except Exception as e:
+            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=T(str(e))))
 
     # TODO check that user is correct (could jump to this page as another user)
     return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=file_name, err_msg=""))
-
-
-@auth.requires_login()
-def confirm_session_token():
-    """
-    Check that we have an access token for the current session/project
-    (if user was already logged in, and launches from BaseSpace with a new project context)
-    """
-    response.menu = False
-
-    # get project to select items from
-    app_session_num = session.app_session_num
-    project_num = session.project_num
-    
-    # if the session num is new, need to update token with browse access
-    if db(db.app_session.app_session_num==session.app_session_num).isempty():
-        session.return_url = 'choose_analysis_inputs'
-        session.scope = 'read'
-        redirect('get_auth_code')
-    else:
-        redirect('choose_analysis_inputs')
-
+            
 
 @auth.requires_login()
 def choose_analysis_inputs():
