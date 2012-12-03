@@ -36,4 +36,3 @@ Redirect URI: localhost:8000/PicardSpace
 
 Known Issues
 ============
-1. Files downloaded from BaseSpace and files output by Picard aren't cleaned up (deleted).
