@@ -7,11 +7,15 @@
 
 <p class="text-error lead">{{=err_msg}}</p>
 
-<p>Please select a BAM file to analyze:</p>
-
-<h3>BaseSpace Project '{{=project_name}}'</h3>
-
-<div id="file_chooser">file_chooser</div>
-<!-- TODO added js here -->
-<script src="{{=URL('static','jqueryFileTree/jqueryFileTree.js')}}"></script>
-<script src="{{=URL('static','bs_file_tree.js')}}"></script>
+<form enctype="multipart/form-data" 
+    action="{{=URL('confirm_analysis_inputs')}}" method="post">
+    <legend>Please select a BAM file from Project {{=project_name}}:</legend>
+    {{for file in file_info:}}
+        <label class="radio">
+            <input type="radio" name="file_choice" id="{{=file['file_name']}}" value="{{=file['app_result_num']}},{{=file['file_num']}}">
+            {{=file['file_name']}}
+        </label>
+    {{pass}}
+    <br/>
+    <button type="submit" class="btn btn-primary btn-large">Next...</button>
+</form>

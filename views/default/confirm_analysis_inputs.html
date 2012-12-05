@@ -3,6 +3,8 @@
 
 <div class="container">
 
+  <p class="text-error lead">{{=err_msg}}</p>
+  
   <form enctype="multipart/form-data"
       action="{{=URL('get_auth_code')}}" method="post">
     <legend>Would you like to analyze this Sample?</legend>
@@ -14,7 +16,3 @@
     <br/>
     <button type="submit" class="btn btn-primary btn-large">Launch Analysis</button>
 </form>
-
-<!--
-<b>{{=A(T("Analyze!"), _href=URL('get_auth_code'))}}</b>
--->

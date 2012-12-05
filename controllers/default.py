@@ -3,7 +3,7 @@
 import os.path
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
-from picardSpace import File
+from picardSpace import File, readable_bytes
 import shutil
 
 def index():
@@ -240,10 +240,34 @@ def choose_analysis_inputs():
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(session.project_num)
     except Exception as e:
-        return dict(project_name="", err_msg=str(e))        
+        return dict(project_name="", file_info="", err_msg=str(e))        
     project_name = proj.Name    
 
-    return dict(project_name=project_name, err_msg="")
+    # get all App Results for current Project
+    file_info = []    
+    try:                        
+        #app_results = proj.getAppResults(bs_api)  # to limit to 10 result, add: myQp={'Limit':10}
+        app_results = proj.getAppResults(bs_api, myQp={'Limit':3})
+
+    except Exception as e:
+        return dict(project_name=project_name, file_info="", err_msg=str(e))        
+    
+    # get Files for each AppResult    
+    for result in app_results:       
+       try:
+           bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
+       except Exception as e:
+           return dict(project_name=project_name, file_info="", err_msg=str(e))        
+    
+       # construct display name for each BAM file   
+       # TODO get Sample name (from relationship to AppResult)
+       # TODO add file size
+       for f in bs_files:           
+           file_info.append( { "file_name" : result.Name + " - " + f.Name + " (" + readable_bytes(f.Size) + ")",
+                               "file_num" : f.Id,
+                               "app_result_num" : result.Id } )                      
+    
+    return dict(project_name=project_name, file_info=file_info, err_msg="")
 
 
 @auth.requires_login()
@@ -253,9 +277,11 @@ def confirm_analysis_inputs():
     """
     response.menu = False
     
-    # get file_num and app_result_num that user selected
-    session.file_num = request.get_vars.file_num
-    orig_app_result_num = request.get_vars.app_result_num    
+    # get file_num and app_result_num that user selected    
+    if (request.post_vars['file_choice']):
+        [orig_app_result_num, session.file_num] = request.post_vars['file_choice'].split(',')        
+    else:
+        return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
 
     # get name of file and project (and sample, future) from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -284,7 +310,7 @@ def confirm_analysis_inputs():
     # set scope for getting access token and url to redirect to afterwards
     session.return_url = 'start_analysis'
     session.scope = 'write'
-
+    
     return dict(sample_name=T(str(sample_name)), file_name=T(str(bs_file.Name)), project_name=T(str(project.Name)), err_msg="")        
 
 
@@ -400,45 +426,6 @@ def start_analysis():
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))
-                              
-
-def browse_bs_app_results():
-    """
-    Return an html list of BaseSpace data (for display with JQuery File Tree)
-    """
-    # TODO if project num isn't set, we need a token to browse it
-    if not session.project_num:
-        return False
-
-    # for current project, get all app results from BaseSpace        
-    user_row = db(db.auth_user.id==auth.user_id).select().first()
-    app = db(db.app_data.id > 0).select().first()
-    try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
-        proj = bs_api.getProjectById(session.project_num)    
-        # only display first 10 AppResults
-        app_results = proj.getAppResults(bs_api, myQp={'Limit':10})
-        #app_results = proj.getAppResults(bs_api)
-    except Exception as e:
-        return '<p class="text-error">' + str(e) + '</p>'
-
-    
-    # now build html list
-    r=['<ul class="jqueryFileTree" style="display: none;">']
-    #r.append('<li class="directory"><a href="#" rel="' + proj.Name + '/">' + proj.Name + '</a></li>')
-    for result in app_results:
-       r.append('<li class="directory collapsed"><a href="#" rel="' + proj.Name + '/' + result.Name + '/">' + result.Name + '</a></li>')
-       try:
-           bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':250})
-       except Exception as e:
-           return '<p class="text-error">' + str(e) + '</p>'
-       
-       # TODO adjust file extensions
-       for f in bs_files:
-           r.append('<li class="file ext_txt"><a href="confirm_analysis_inputs?file_num=' + f.Id + '&app_result_num=' + result.Id + '" rel="' + proj.Name + '/' + result.Name + '/' + f.Name + '">' + f.Name + '</a></li>')
-
-    r.append('</ul>')
-    return ''.join(r)
     
 
 # for user authentication

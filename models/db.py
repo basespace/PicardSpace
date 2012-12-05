@@ -44,6 +44,9 @@ auth.settings.registration_requires_verification = False
 auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
+# auto-logout after 30 seconds - not working for unknown reason
+auth.settings.expiration = 30
+
 
 # define app data - NOTE if changing any defaults, must manually deleted existing db entry
 # basespace.com, user basespaceuser1, app picardSpace
