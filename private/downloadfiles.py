@@ -2,7 +2,7 @@ import time
 from picardSpace import AnalysisInputFile
 
 while True:
-    # iterate through all entires in the download queue
+    # iterate through all entries in the download queue
     for row in db(db.download_queue.status=='pending').select():
 
         # get queued app result from db
@@ -11,7 +11,7 @@ while True:
 
         # update status of app result
         ar_row = db(db.app_result.id==row.app_result_id).select().first()
-        ar_row.update_record(status="downloading")
+        ar_row.update_record(status='downloading')
         db.commit()
 
         # create a File object
@@ -25,10 +25,11 @@ while True:
         # download the file from BaseSpace
         try:
             als_file.download_and_analyze()
-        except Exception as e:
-            # TODO print to log file
+        except Exception as e:            
+            # print error msg, and update download queue and AppResult status in db
             print "Error: {0}".format(str(e))
             row.update_record(status='error')
+            ar_row.update_record(status='error', message=str(e))            
         else:
             row.update_record(status='complete')
         db.commit()

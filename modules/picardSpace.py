@@ -65,7 +65,7 @@ class AnalysisInputFile(File):
         # update file's local path
         file_row = db(db.bs_file.id==self.bs_file_id).select().first()     
         file_row.update_record(local_path=local_file)
-        db.commit()
+        db.commit()               
         
         # add file to analysis queue
         db.analysis_queue.insert(status='pending', app_result_id=self.app_result_id)
