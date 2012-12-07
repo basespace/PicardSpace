@@ -261,19 +261,24 @@ class BaseSpaceAccount(object):
 auth.settings.login_form=BaseSpaceAccount()
 
 
+# database naming convention:
+# 'id's are local database identifiers
+# 'num's are BaseSpace identifiers
+
 # define db tables
 db.define_table('app_session',
     Field('app_session_num'),
-    Field('project_num'),          # the BaseSpace project to write-back results
+    Field('project_num'),               # the BaseSpace project to write-back results
     Field('user_id'), db.auth_user,
     Field('date_created')) 
 
-db.define_table('app_result',      # newly created AppResult for PicardSpace's output files
+db.define_table('app_result',           # newly created AppResult for PicardSpace's output files
     Field('app_session_id', db.app_session),
     Field('app_result_name'),
     Field('app_result_num'),
-    Field('project_num'),         # the project that contains this app result in BaseSpace
-    Field('sample_num'),
+    Field('project_num'),               # the Project that contains this app result in BaseSpace
+    Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
+    Field('input_file_id'),# db.bs_file), # the File that was used as an input to this AppResult, if any (BAM for picardSpace)
     Field('status'),
     Field('message'))
 
@@ -282,13 +287,13 @@ db.define_table('bs_file',
     Field('file_num'),
     Field('file_name'),
     Field('local_path'),
-    Field('io_type'))   # 'input' or 'output' from an appResult
+    Field('io_type'))                    # 'input' or 'output' from an appResult
 
 db.define_table('download_queue',
     Field('status'),
-    Field('app_result_id', db.app_result))
+    Field('bs_file_id', db.bs_file))
         
 db.define_table('analysis_queue',
     Field('status'),
     Field('message'),
-    Field('app_result_id', db.app_result))
+    Field('bs_file_id', db.bs_file))

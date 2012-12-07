@@ -5,12 +5,13 @@ while True:
     # iterate through all entries in the download queue
     for row in db(db.download_queue.status=='pending').select():
 
-        # get queued app result from db
-        # note: only downloading 1 file per app result for now
-        f_row = db(db.bs_file.app_result_id==row.app_result_id).select().first()
+        # get queued file from db
+        f_row = db(db.bs_file.id==row.bs_file_id).select().first()
+        ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
+        #ar_row = db(db.app_result.id==row.app_result_id).select().first()
+        #f_row = db(db.bs_file.id==ar_row.input_file_id).select().first()
 
         # update status of app result
-        ar_row = db(db.app_result.id==row.app_result_id).select().first()
         ar_row.update_record(status='downloading')
         db.commit()
 

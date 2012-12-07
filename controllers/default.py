@@ -413,20 +413,24 @@ def start_analysis():
         project_num=session.project_num,
         app_result_name=session.app_result_name,
         app_result_num=app_result.Id,
-        sample_num=session.sample_num,
+        sample_num=session.sample_num,        
         status="queued for download",
         message="none")      
     db.commit()    
 
     # add input BAM file to db
     bs_file_id = db.bs_file.insert(
-        app_result_id=app_result_id,
+        app_result_id=app_result_id, # TODO currently this is newly created appResult that will analyze this BAM, not the AppResult that contains this BAM in BaseSpace - change this and/or make clearer
         file_num=session.file_num, 
         file_name=session.file_name,
         io_type="input")
-        
-    # add App Result to download queue
-    db.download_queue.insert(status='pending', app_result_id=app_result_id)
+
+    # TODO adding BAM as input file to new AppResult -- move to new AppResult above when bs_file is refactored just above
+    ar_row = db(db.app_result.id==app_result_id).select().first()
+    ar_row.update_record(input_file_id=bs_file_id)
+    
+    # add BAM File to download queue
+    db.download_queue.insert(status='pending', bs_file_id=bs_file_id)
 
     # clear session vars
     session.app_session_num = None

@@ -68,8 +68,9 @@ class AnalysisInputFile(File):
         db.commit()               
         
         # add file to analysis queue
-        db.analysis_queue.insert(status='pending', app_result_id=self.app_result_id)
-     
+        db.analysis_queue.insert(status='pending', bs_file_id=self.bs_file_id)
+
+        # TODO change app_result status to 'download complete, in analysis queue'
 
 class AnalysisFeedback:
     """
