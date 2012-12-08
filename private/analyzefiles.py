@@ -9,17 +9,15 @@ while True:
         f_row = db(db.bs_file.id==row.bs_file_id).select().first()
         ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
 
-        #ar_row = db(db.app_result.id==row.app_result_id).select().first()
-        #f_row = db(db.bs_file.id==ar_row.input_file_id).select().first()
-
-        f = AnalysisInputFile(
-            app_result_id=ar_row.id,
+        input_file = AnalysisInputFile(
+            #app_result_id=ar_row.id,
+            app_result_id=f_row.app_result_id,
             file_num=f_row.file_num,
             file_name=f_row.file_name,
             local_path=f_row.local_path)
 
         # create AppResult object to analyze downloaded File
-        new_als = AppResult(
+        app_result = AppResult(
             app_result_id=ar_row.id,
             app_session_id=ar_row.app_session_id,
             project_num=ar_row.project_num,
@@ -29,7 +27,7 @@ while True:
             
         # run analysis and writeback results to BaseSpace
         try:
-            fb = new_als.run_analysis_and_writeback(f)
+            fb = app_result.run_analysis_and_writeback(input_file)
             status = fb.status
             message = fb.message
         except Exception as e:

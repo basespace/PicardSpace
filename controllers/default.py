@@ -22,7 +22,7 @@ def index():
     session.app_result_name = None
     session.file_num = None
     session.file_name = None
-
+    session.orig_app_result_num = None
     
     main_msg = 'Welcome to PicardSpace'
     scnd_msg = 'Please log in'
@@ -168,20 +168,21 @@ def view_alignment_metrics():
     # get AppResult from db
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     ssn_row = db(db.app_session.id==app_session_id).select().first()
-    ar_row = db(db.app_result.app_session_id==app_session_id).select().first()        
+    new_ar_row = db(db.app_result.app_session_id==app_session_id).select().first()        
     app = db(db.app_data.id > 0).select().first()    
-    input_file_row = db((db.bs_file.app_result_id==ar_row.id) & (db.bs_file.io_type=='input')).select().first()
-    
+    input_file_row = db(db.bs_file.id==new_ar_row.input_file_id).select().first()
+    orig_ar_row = db(db.app_result.id==input_file_row.app_result_id).select().first()
+        
     # get Sample and Project from BaseSpace
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)        
-        sample = bs_api.getSampleById(ar_row.sample_num)        
-        project = bs_api.getProjectById(ar_row.project_num)
+        sample = bs_api.getSampleById(new_ar_row.sample_num)        
+        project = bs_api.getProjectById(new_ar_row.project_num)
     except Exception as e:    
-        return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name="", file_name="", app_result_name="", project_name="", err_msg=T(str(e))))
+        return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name="", file_name="", new_app_result_name="", project_name="", orig_app_result_name="", err_msg=T(str(e))))
 
     # get output file info from db
-    f_row = db((db.bs_file.app_result_id==ar_row.id)
+    f_row = db((db.bs_file.app_result_id==new_ar_row.id)
         & (db.bs_file.io_type=='output')).select().first()
         # TODO select only AlignmentMetrics file, remove first()
 
@@ -195,9 +196,9 @@ def view_alignment_metrics():
         # download file from BaseSpace
         local_dir=os.path.join(request.folder, "private", "downloads", "viewing", str(ssn_row.app_session_num))         
         try:
-            local_path = f.download_file(f_row.file_num, local_dir)
+            local_path = f.download_file(f_row.file_num, local_dir, app_session_id)
         except Exception as e:
-            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, app_result_name=ar_row.app_result_name, project_name=project.Name, err_msg=T(str(e))))
+            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, new_app_result_name=new_ar_row.app_result_name, project_name=project.Name, orig_app_result_name=orig_ar_row.app_result_name, err_msg=T(str(e))))
         
         # read local file into array (for display in view)
         with open( local_path, "r") as ALN_QC:
@@ -222,10 +223,10 @@ def view_alignment_metrics():
         try:
             shutil.rmtree(os.path.dirname(local_path))            
         except Exception as e:
-            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, app_result_name=ar_row.app_result_name, project_name=project.Name, err_msg=T(str(e))))
+            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, new_app_result_name=new_ar_row.app_result_name, project_name=project.Name, orig_app_result_name=orig_ar_row.app_result_name, err_msg=T(str(e))))
 
     # TODO check that user is correct (could jump to this page as another user)
-    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, app_result_name=ar_row.app_result_name, project_name=project.Name, err_msg=""))
+    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, new_app_result_name=new_ar_row.app_result_name, project_name=project.Name, orig_app_result_name=orig_ar_row.app_result_name, err_msg=""))
             
 
 @auth.requires_login()
@@ -285,7 +286,7 @@ def confirm_analysis_inputs():
     
     # get file_num and app_result_num that user selected    
     if (request.post_vars['file_choice']):
-        [orig_app_result_num, session.file_num] = request.post_vars['file_choice'].split(',')        
+        [session.orig_app_result_num, session.file_num] = request.post_vars['file_choice'].split(',')        
     else:
         return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
 
@@ -298,7 +299,7 @@ def confirm_analysis_inputs():
         bs_file = bs_api.getFileById(session.file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
 
-        app_result = bs_api.getAppResultById(orig_app_result_num)
+        app_result = bs_api.getAppResultById(session.orig_app_result_num)
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
         return dict(sample_name="", file_name="", project_name="", err_msg=str(e))        
@@ -402,36 +403,43 @@ def start_analysis():
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
         project = bs_api.getProjectById(session.project_num)
+        orig_app_result = bs_api.getAppResultById(session.orig_app_result_num)
         sample = bs_api.getSampleById(session.sample_num)
-        app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+        new_app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
-        
+    
+    # add 'original' app_result to db
+    orig_app_result_id = db.app_result.insert(
+        app_result_name=orig_app_result.Name,
+        app_result_num=session.orig_app_result_num,
+        sample_num=session.sample_num)
+    db.commit()
+    
+    # add input BAM file to db
+    bs_file_id = db.bs_file.insert(
+        app_result_id=orig_app_result_id,
+        file_num=session.file_num, 
+        file_name=session.file_name,
+        io_type="input")           
+    db.commit()                    
+                                                            
     # add new AppResult to db            
-    app_result_id = db.app_result.insert(
+    new_app_result_id = db.app_result.insert(
         app_session_id=app_ssn_row.id,
         project_num=session.project_num,
         app_result_name=session.app_result_name,
-        app_result_num=app_result.Id,
+        app_result_num=new_app_result.Id,
         sample_num=session.sample_num,        
+        input_file_id=bs_file_id,
         status="queued for download",
         message="none")      
-    db.commit()    
-
-    # add input BAM file to db
-    bs_file_id = db.bs_file.insert(
-        app_result_id=app_result_id, # TODO currently this is newly created appResult that will analyze this BAM, not the AppResult that contains this BAM in BaseSpace - change this and/or make clearer
-        file_num=session.file_num, 
-        file_name=session.file_name,
-        io_type="input")
-
-    # TODO adding BAM as input file to new AppResult -- move to new AppResult above when bs_file is refactored just above
-    ar_row = db(db.app_result.id==app_result_id).select().first()
-    ar_row.update_record(input_file_id=bs_file_id)
+    db.commit()
     
     # add BAM File to download queue
     db.download_queue.insert(status='pending', bs_file_id=bs_file_id)
-
+    db.commit()
+    
     # clear session vars
     session.app_session_num = None
     session.project_num = None
@@ -439,6 +447,7 @@ def start_analysis():
     session.app_result_name = None
     session.file_num = None
     session.file_name = None
+    session.orig_app_result_num = None
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))

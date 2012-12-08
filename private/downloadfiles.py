@@ -8,8 +8,6 @@ while True:
         # get queued file from db
         f_row = db(db.bs_file.id==row.bs_file_id).select().first()
         ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
-        #ar_row = db(db.app_result.id==row.app_result_id).select().first()
-        #f_row = db(db.bs_file.id==ar_row.input_file_id).select().first()
 
         # update status of app result
         ar_row.update_record(status='downloading')
@@ -17,7 +15,7 @@ while True:
 
         # create a File object
         als_file = AnalysisInputFile(
-            app_result_id=f_row.app_result_id,
+            app_result_id=f_row.app_result_id, # incorrect
             bs_file_id=f_row.id,
             file_num=f_row.file_num,
             file_name=f_row.file_name,

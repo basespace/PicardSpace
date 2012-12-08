@@ -17,16 +17,15 @@ class File:
         self.local_path = local_path
         self.file_num = file_num        
         self.bs_file_id = bs_file_id
-        self.app_result_id = app_result_id   # used for inputs to app results
+        self.app_result_id = app_result_id
 
-    def download_file(self, file_num, local_dir):
+    def download_file(self, file_num, local_dir, app_session_id):
         """
-        Download a file from BaseSpace inot the provided directory (created if doesn't exist)
-        """     
+        Download a file from BaseSpace into the provided directory (created if doesn't exist)
+        """
         db = current.db
-        # get access token for app session's user (can't use current user since accessing from cron script)
-        ar_row = db(db.app_result.id==self.app_result_id).select().first()
-        app_ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
+        # get access token for app session's user (can't use current user since accessing from cron script)        
+        app_ssn_row = db(db.app_session.id==app_session_id).select().first()
         user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
                         
         # get file info from BaseSpace
@@ -52,15 +51,15 @@ class AnalysisInputFile(File):
         Download file contents from BaseSpace and queue the file for analysis
         """           
         db = current.db  
-        # get file and analysis info from database        
-        ar_row = db(db.app_result.id==self.app_result_id).select().first()
+        # get input file and new app result info from database        
+        ar_row = db(db.app_result.input_file_id==self.bs_file_id).select().first()
         app_ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
         
         # set local_path location and url for downloading
         local_dir = os.path.join(current.request.folder, "private", "downloads", "inputs", str(app_ssn_row.app_session_num))
 
         # download file from BaseSpace
-        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir)
+        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=app_ssn_row.id)
 
         # update file's local path
         file_row = db(db.bs_file.id==self.bs_file_id).select().first()     
