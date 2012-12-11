@@ -10,7 +10,6 @@ while True:
         ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
 
         input_file = AnalysisInputFile(
-            #app_result_id=ar_row.id,
             app_result_id=f_row.app_result_id,
             file_num=f_row.file_num,
             file_name=f_row.file_name,

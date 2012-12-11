@@ -11,7 +11,6 @@ def index():
     A user just launched the PicardSpace app
     Retrieve the app session number to identify items that the users selected to analyze
     """
-    response.menu = False
     response.title = "PicardSpace"
     response.subtitle = "Home Page"
 
@@ -22,7 +21,7 @@ def index():
     session.app_result_name = None
     session.file_num = None
     session.file_name = None
-    session.orig_app_result_num = None
+    session.input_app_result_num = None
     
     main_msg = 'Welcome to PicardSpace'
     scnd_msg = 'Please log in'
@@ -33,7 +32,7 @@ def index():
         appsessionuri = request.get_vars.appsessionuri
         session.app_session_num = os.path.basename(appsessionuri)
          
-        # exchange app session num for items the user pre-selected in BaseSpace
+        # get app session num from BaseSpace
         app = db(db.app_data.id > 0).select().first()
         try:
             bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
@@ -41,12 +40,11 @@ def index():
         except Exception as e:
             return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(str(e)))            
 
-        # TODO iterate over all inputs and assemble into master scope string?
+        # get the project num and access string of pre-selected Project
         ssn_ref = app_ssn.References[0]
         if (ssn_ref.Type != 'Project'):
             err_msg += "Error - unrecognized reference type " + ssn_ref.Type + ". "
-        else:
-            # get the project num and access string of pre-selected Project
+        else:            
             ref_content = ssn_ref.Content
             session.project_num = ref_content.Id
             session.scope = ref_content.getAccessStr(scope='read')
@@ -57,11 +55,11 @@ def index():
                 date_created=app_ssn.DateCreated)
                 
             # user should already be logged into BaseSpace, so redirect to logged-in screen
-            redirect(user_now_logged_in())
+            redirect(URL('user_now_logged_in'))
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
-        redirect(user_now_logged_in())       
+        redirect(URL('user_now_logged_in'))       
 
     # construct login_url for login link
     # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'    
@@ -72,7 +70,9 @@ def index():
                                     
     return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg), login_url=login_url)
 
-
+#
+# Note - all '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called
+#
 @auth.requires_login()
 def user_now_logged_in():
     """
@@ -99,9 +99,7 @@ def user_now_logged_in():
 def view_results():
     """
     Main page for logged-in users - shows list of past analyses and option to launch new analysis
-    """
-    response.menu = False
-    
+    """        
     # if arriving from just-launched analysis, display msg 'just launched'
     app_ssns = []
     err_msg = ""
@@ -127,23 +125,7 @@ def view_results():
             try:
                 proj = bs_api.getProjectById(rslt_row.project_num)
             except Exception as e:
-                return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                
-
-            # get sample, and file names for each AppResult    
-            #sample_name = "unknown"
-            #if (rslt_row.sample_num):
-            #    try:
-            #        sample = bs_api.getSampleById(rslt_row.sample_num)
-            #    except Exception as e:
-            #        return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                
-            #    sample_name = sample.Name
-            
-            ## getting input BAM file here (restricted to single input file)
-            #file_row = db((db.bs_file.app_result_id==rslt_row.id) & (db.bs_file.io_type=='input')).select().first()
-            #try:
-            #    bs_file = bs_api.getFileById(file_row.file_num)
-            #except Exception as e:
-            #    return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                
+                return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                                  
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':rslt_row.status, 'app_session_id':ssn_row.id, 'notes':rslt_row.message, 'date_created':ssn_row.date_created } )
             #    'sample_name':sample_name, 'file_name':bs_file.Name,                 
@@ -156,7 +138,6 @@ def view_alignment_metrics():
     """
     Display picard's output from CollectAlignmentMetrics
     """
-    response.menu = False
     app_session_id = request.get_vars.app_session_id
     
     # set var defaults
@@ -168,21 +149,31 @@ def view_alignment_metrics():
     # get AppResult from db
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     ssn_row = db(db.app_session.id==app_session_id).select().first()
-    new_ar_row = db(db.app_result.app_session_id==app_session_id).select().first()        
+    output_ar_row = db(db.app_result.app_session_id==app_session_id).select().first()        
+    input_file_row = db(db.bs_file.id==output_ar_row.input_file_id).select().first()
+    input_ar_row = db(db.app_result.id==input_file_row.app_result_id).select().first()
     app = db(db.app_data.id > 0).select().first()    
-    input_file_row = db(db.bs_file.id==new_ar_row.input_file_id).select().first()
-    orig_ar_row = db(db.app_result.id==input_file_row.app_result_id).select().first()
-        
+                
     # get Sample and Project from BaseSpace
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)        
-        sample = bs_api.getSampleById(new_ar_row.sample_num)        
-        project = bs_api.getProjectById(new_ar_row.project_num)
+        sample = bs_api.getSampleById(output_ar_row.sample_num)        
+        output_project = bs_api.getProjectById(output_ar_row.project_num)
+        # TODO TODO TODO
+        input_project = bs_api.getProjectById(input_ar_row.project_num)
     except Exception as e:    
-        return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name="", file_name="", new_app_result_name="", project_name="", orig_app_result_name="", err_msg=T(str(e))))
+        return(dict(aln_tbl=tps_aln_tbl, 
+            hdr=hdr,
+            sample_name="", 
+            input_file_name="", 
+            input_project_name="", 
+            input_app_result_name="", 
+            output_app_result_name="", 
+            output_project_name="", 
+            err_msg=T(str(e))))
 
     # get output file info from db
-    f_row = db((db.bs_file.app_result_id==new_ar_row.id)
+    f_row = db((db.bs_file.app_result_id==output_ar_row.id)
         & (db.bs_file.io_type=='output')).select().first()
         # TODO select only AlignmentMetrics file, remove first()
 
@@ -198,7 +189,15 @@ def view_alignment_metrics():
         try:
             local_path = f.download_file(f_row.file_num, local_dir, app_session_id)
         except Exception as e:
-            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, new_app_result_name=new_ar_row.app_result_name, project_name=project.Name, orig_app_result_name=orig_ar_row.app_result_name, err_msg=T(str(e))))
+            return(dict(aln_tbl=tps_aln_tbl, 
+                hdr=hdr, 
+                sample_name=sample.Name, 
+                input_file_name=input_file_row.file_name, 
+                input_project_name=input_project.Name, 
+                input_app_result_name=input_ar_row.app_result_name,  
+                output_app_result_name=output_ar_row.app_result_name, 
+                output_project_name=output_project.Name, 
+                err_msg=T(str(e))))
         
         # read local file into array (for display in view)
         with open( local_path, "r") as ALN_QC:
@@ -223,10 +222,25 @@ def view_alignment_metrics():
         try:
             shutil.rmtree(os.path.dirname(local_path))            
         except Exception as e:
-            return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, new_app_result_name=new_ar_row.app_result_name, project_name=project.Name, orig_app_result_name=orig_ar_row.app_result_name, err_msg=T(str(e))))
+            return(dict(aln_tbl=tps_aln_tbl, 
+                hdr=hdr, sample_name=sample.Name, 
+                input_file_name=input_file_row.file_name, 
+                input_project_name=input_project.Name, 
+                input_app_result_name=input_ar_row.app_result_name,  
+                output_app_result_name=output_ar_row.app_result_name, 
+                output_project_name=output_project.Name, 
+                err_msg=T(str(e))))
 
     # TODO check that user is correct (could jump to this page as another user)
-    return(dict(aln_tbl=tps_aln_tbl, hdr=hdr, sample_name=sample.Name, file_name=input_file_row.file_name, new_app_result_name=new_ar_row.app_result_name, project_name=project.Name, orig_app_result_name=orig_ar_row.app_result_name, err_msg=""))
+    return(dict(aln_tbl=tps_aln_tbl, 
+        hdr=hdr, 
+        sample_name=sample.Name, 
+        input_file_name=input_file_row.file_name, 
+        input_project_name=input_project.Name, 
+        input_app_result_name=input_ar_row.app_result_name,  
+        output_app_result_name=output_ar_row.app_result_name, 
+        output_project_name=output_project.Name, 
+        err_msg=""))
             
 
 @auth.requires_login()
@@ -234,8 +248,6 @@ def choose_analysis_inputs():
     """
     Offers the user choice of files to analyze
     """
-    response.menu = False
-
     # get project context that user launched from BaseSpace
     app_session_num = session.app_session_num
     project_num = session.project_num
@@ -268,7 +280,6 @@ def choose_analysis_inputs():
     
        # construct display name for each BAM file   
        # TODO get Sample name (from relationship to AppResult)
-       # TODO add file size
        for f in bs_files:           
            file_info.append( { "file_name" : result.Name + " - " + f.Name + " (" + readable_bytes(f.Size) + ")",
                                "file_num" : f.Id,
@@ -281,12 +292,10 @@ def choose_analysis_inputs():
 def confirm_analysis_inputs():
     """
     Confirms user's choice of file to analyze; offers naming app result and launch button
-    """
-    response.menu = False
-    
+    """    
     # get file_num and app_result_num that user selected    
     if (request.post_vars['file_choice']):
-        [session.orig_app_result_num, session.file_num] = request.post_vars['file_choice'].split(',')        
+        [session.input_app_result_num, session.file_num] = request.post_vars['file_choice'].split(',')        
     else:
         return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
 
@@ -299,7 +308,7 @@ def confirm_analysis_inputs():
         bs_file = bs_api.getFileById(session.file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
 
-        app_result = bs_api.getAppResultById(session.orig_app_result_num)
+        app_result = bs_api.getAppResultById(session.input_app_result_num)
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
         return dict(sample_name="", file_name="", project_name="", err_msg=str(e))        
@@ -398,33 +407,34 @@ def start_analysis():
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
                  
-    # add new AppResult to BaseSpace
+    # add new AppResult to BaseSpace - using same Project that contains input file
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
         project = bs_api.getProjectById(session.project_num)
-        orig_app_result = bs_api.getAppResultById(session.orig_app_result_num)
+        input_app_result = bs_api.getAppResultById(session.input_app_result_num)
         sample = bs_api.getSampleById(session.sample_num)
         new_app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
     
-    # add 'original' app_result to db
-    orig_app_result_id = db.app_result.insert(
-        app_result_name=orig_app_result.Name,
-        app_result_num=session.orig_app_result_num,
+    # add input app_result to db
+    input_app_result_id = db.app_result.insert(
+        project_num=session.project_num,
+        app_result_name=input_app_result.Name,
+        app_result_num=session.input_app_result_num,
         sample_num=session.sample_num)
     db.commit()
     
     # add input BAM file to db
     bs_file_id = db.bs_file.insert(
-        app_result_id=orig_app_result_id,
+        app_result_id=input_app_result_id,
         file_num=session.file_num, 
         file_name=session.file_name,
         io_type="input")           
     db.commit()                    
                                                             
-    # add new AppResult to db            
+    # add new ouput AppResult to db            
     new_app_result_id = db.app_result.insert(
         app_session_id=app_ssn_row.id,
         project_num=session.project_num,
@@ -447,7 +457,7 @@ def start_analysis():
     session.app_result_name = None
     session.file_num = None
     session.file_name = None
-    session.orig_app_result_num = None
+    session.input_app_result_num = None
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))

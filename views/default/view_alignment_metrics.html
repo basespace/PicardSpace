@@ -1,19 +1,25 @@
-{{left_sidebar_enabled,right_sidebar_enabled=False,False}}
+{{navbar_enabled=True}}
 {{extend 'layout.html'}}
 
 <div class="page-header">
   <h1>Picard Alignment Metrics</h1>
     <dl class="dl-horizontal">
-        <dt>AppResult</dt>
-        <dd>{{=new_app_result_name}}</dd>
-        <dt>Source Sample</dt>
+        <dt>Sample</dt>
         <dd>{{=sample_name}}</dd>
-        <dt>Source File</dt>
-        <dd>{{=file_name}}</dd>
-        <dt>Source AppResult</dt>
-        <dd>{{=orig_app_result_name}}</dd>
-        <dt>Source Project</dt>
-        <dd>{{=project_name}}</dd>
+    </dl>        
+    <dl class="dl-horizontal">        
+        <dt>Output AppResult</dt>
+        <dd>{{=output_app_result_name}}</dd>
+        <dt>Output Project</dt>
+        <dd>{{=output_project_name}}</dd>
+    </dl>
+    <dl class="dl-horizontal">        
+        <dt>Input File</dt>
+        <dd>{{=input_file_name}}</dd>
+        <dt>Input AppResult</dt>
+        <dd>{{=input_app_result_name}}</dd>
+        <dt>Input Project</dt>
+        <dd>{{=input_project_name}}</dd>
     </dl>    
 </div>
 

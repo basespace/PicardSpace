@@ -255,6 +255,8 @@ class BaseSpaceAccount(object):
 
     def logout_url(self, next="/"):
         del self.session.token
+        # TODO necessary?
+        current.session.auth = None
         return next
 
 # instantiate Oauth2 login form
@@ -283,7 +285,7 @@ db.define_table('app_result',           # newly created AppResult for PicardSpac
     Field('message'))
 
 db.define_table('bs_file',
-    Field('app_result_id', db.app_result),
+    Field('app_result_id', db.app_result), # the AppResult that contains this File in BaseSpace
     Field('file_num'),
     Field('file_name'),
     Field('local_path'),

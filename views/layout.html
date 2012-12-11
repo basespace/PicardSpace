@@ -15,7 +15,6 @@
   response.files.append(URL('static','css/bootstrap.min.css'))
   response.files.append(URL('static','css/bootstrap-responsive.min.css'))
   response.files.append(URL('static','css/picardSpace.css'))
-
   }}
   
   {{include 'web2py_ajax.html'}}
@@ -27,26 +26,16 @@
 
   <div class="container">
 
-  <!-- Navbar ================================================== -->
-  <div class="navbar">
-    <div class="navbar-inner">
-      <div class="container">        
-        <a class="brand" href="index"><b>PicardSpace</b>&nbsp;</a>
-              
-        <div class="pull-right">{{='auth' in globals() and auth.navbar(separators=(' ',' | ',''))}}</div>
-      </div>
-    </div>
-  </div><!-- navbar -->
-  
-   
+      {{if navbar_enabled:}}
+          {{include 'default/navbar.html'}}
+      {{pass}}
+      
     <section id="main" class="main row">
-
         <div>
             {{block center}}
             {{include}}
             {{end}}
-        </div>
-        
+        </div>        
     </section><!--/main-->
 
   </div> <!-- /container -->
