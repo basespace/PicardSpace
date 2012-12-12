@@ -8,10 +8,7 @@ while True:
         # get queued file from db
         f_row = db(db.bs_file.id==row.bs_file_id).select().first()
         ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
-
-        # update status of app result
-        ar_row.update_record(status='downloading')
-        db.commit()
+        ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
 
         # create a File object
         als_file = AnalysisInputFile(
@@ -25,10 +22,11 @@ while True:
         try:
             als_file.download_and_analyze()
         except Exception as e:            
-            # print error msg, and update download queue and AppResult status in db
             print "Error: {0}".format(str(e))
+
+            # update download queue and AppSession status in db
             row.update_record(status='error')
-            ar_row.update_record(status='error', message=str(e))            
+            ssn_row.update_record(status='error', message=str(e))
         else:
             row.update_record(status='complete')
         db.commit()

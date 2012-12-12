@@ -44,9 +44,12 @@ auth.settings.registration_requires_verification = False
 auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
-# auto-logout after 30 seconds - not working for unknown reason
-auth.settings.expiration = 30
+# auto-logout - doesn't seem to be working for unknown reason
+auth.settings.expiration = 30  # seconds
 
+
+# define global vars
+current.aln_metrics_ext = ".AlignmentMetrics.txt"
 
 # define app data - NOTE if changing any defaults, must manually deleted existing db entry
 # basespace.com, user basespaceuser1, app picardSpace
@@ -272,7 +275,9 @@ db.define_table('app_session',
     Field('app_session_num'),
     Field('project_num'),               # the BaseSpace project to write-back results
     Field('user_id'), db.auth_user,
-    Field('date_created')) 
+    Field('date_created'),
+    Field('status'),                    
+    Field('message'))                   # detail about AppSession status
 
 db.define_table('app_result',           # newly created AppResult for PicardSpace's output files
     Field('app_session_id', db.app_session),
@@ -280,9 +285,7 @@ db.define_table('app_result',           # newly created AppResult for PicardSpac
     Field('app_result_num'),
     Field('project_num'),               # the Project that contains this app result in BaseSpace
     Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
-    Field('input_file_id'),# db.bs_file), # the File that was used as an input to this AppResult, if any (BAM for picardSpace)
-    Field('status'),
-    Field('message'))
+    Field('input_file_id'))# db.bs_file), # the File that was used as an input to this AppResult, if any (BAM for picardSpace)    
 
 db.define_table('bs_file',
     Field('app_result_id', db.app_result), # the AppResult that contains this File in BaseSpace

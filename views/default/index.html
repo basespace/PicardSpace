@@ -3,17 +3,15 @@
 <br/>
 <div class="hero-unit">
   <h1>{{=main_msg}}</h1>
-  <p>{{=scnd_msg}}</p>
-  <p>
-      <a class="btn btn-primary btn-large" href='{{=login_url}}'>
-    <!--<a class="btn btn-primary btn-large" href='http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'>-->
+  <p>{{=scnd_msg}}</p>  
+    <br/>
+  <p><small>PicardSpace calculates sequencing metrics with the open-source tool <a href="http://picard.sourceforge.net">Picard</a>. The PicardSpace app is launched from <a href="http://www.basespace.com">BaseSpace</a> to calculate alignment metrics about a BAM file. Output files are stored in BaseSpace and metrics are viewable in PicardSpace.</small></p>
+  <br/>
 
-    <!--<a class="btn btn-primary btn-large" href={{=URL('user/login')}}>Login</a>-->
-      Login
-    </a>
-  </p>
+<p><a class="btn btn-primary btn-large" href='{{=login_url}}'>Login</a></p>
 </div>
 <p class="text-error">{{=err_msg}}</p>
+
 
 {{if 'message' in globals():}}
 {{=message}}

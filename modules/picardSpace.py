@@ -25,12 +25,12 @@ class File:
         """
         db = current.db
         # get access token for app session's user (can't use current user since accessing from cron script)        
-        app_ssn_row = db(db.app_session.id==app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()                        
+        ssn_row = db(db.app_session.id==app_session_id).select().first()
+        user_row = db(db.auth_user.id==ssn_row.user_id).select().first()                        
                         
         # get file info from BaseSpace
         app = db(db.app_data.id > 0).select().first()
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
         f = bs_api.getFileById(file_num)
                         
         # create local_path dir if it doesn't exist   
@@ -53,13 +53,17 @@ class AnalysisInputFile(File):
         db = current.db  
         # get input file and new app result info from database        
         ar_row = db(db.app_result.input_file_id==self.bs_file_id).select().first()
-        app_ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
+        ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
+        
+        # update app session status
+        ssn_row.update_record(status="downloading")
+        db.commit()
         
         # set local_path location and url for downloading
-        local_dir = os.path.join(current.request.folder, "private", "downloads", "inputs", str(app_ssn_row.app_session_num))
+        local_dir = os.path.join(current.request.folder, "private", "downloads", "inputs", str(ssn_row.app_session_num))
 
         # download file from BaseSpace
-        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=app_ssn_row.id)
+        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
 
         # update file's local path
         file_row = db(db.bs_file.id==self.bs_file_id).select().first()     
@@ -69,7 +73,9 @@ class AnalysisInputFile(File):
         # add file to analysis queue
         db.analysis_queue.insert(status='pending', bs_file_id=self.bs_file_id)
 
-        # TODO change app_result status to 'download complete, in analysis queue'
+        # update app_result status to 'download complete, in analysis queue'
+        ssn_row.update_record(status="queued for analysis", message="download complete")
+        db.commit()
 
 class AnalysisFeedback:
     """
@@ -84,14 +90,12 @@ class AppResult:
     """
     An App Result in BaseSpace
     """
-    def __init__(self, app_result_id, app_session_id, project_num, app_result_name, app_result_num, status="new", message=""):
-        self.app_result_id = app_result_id 
+    def __init__(self, app_result_id, app_session_id, project_num, app_result_name, app_result_num):
+        self.app_result_id = app_result_id
         self.app_session_id = app_session_id
         self.project_num = project_num
         self.app_result_name = app_result_name
-        self.app_result_num = app_result_num
-        self.status = status
-        self.message = message               
+        self.app_result_num = app_result_num                    
         
         self.output_files = []           
 
@@ -104,10 +108,10 @@ class AppResult:
         self._update_status('running', 'picard is running', 'Running')
                 
         # run picard
-        message = "analysis successful"
+        message = 'analysis successful'
         try:
             if not (self._run_picard(input_file=input_file)):
-                message = "analysis Failed"
+                message = 'analysis Failed'
         except IOError as e:
             message = "Error in local file I/O (error number {0}): {1}".format(e.errno, e)
             self._update_status('analysis Error', message, 'Error')
@@ -147,19 +151,19 @@ class AppResult:
         db = current.db
         # update status in local db
         self.status=local_status
-        self.message=message
-        ar_row = db(db.app_result.id==self.app_result_id).select().first()
-        ar_row.update_record(status=self.status, message=self.message)
+        self.message=message        
+        ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        ssn_row.update_record(status=self.status, message=self.message)
         db.commit()
         
         # optionally update status of AppSession in BaseSpace
         if bs_ssn_status:
             # get BaseSpace API
-            app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-            user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first()        
+            ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+            user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
             app = db(db.app_data.id > 0).select().first()
             
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
             app_result = bs_api.getAppResultById(self.app_result_num)
             app_ssn = app_result.AppSession 
             app_ssn.setStatus(bs_api, bs_ssn_status, message)   
@@ -174,15 +178,14 @@ class AppResult:
         app = db(db.app_data.id > 0).select().first()
 
         # assemble picard command and run it
-        (dirname, file_name) = os.path.split(input_path)
-        aln_met_name = file_name + ".AlignmentMetrics.txt"
+        (dirname, file_name) = os.path.split(input_path)        
+        aln_met_name = file_name + current.aln_metrics_ext
         output_path = os.path.join(dirname, aln_met_name)
         
         command = ["java", "-jar", 
             os.path.join(current.request.folder, app.picard_exe),
             "INPUT=" + input_path, 
             "OUTPUT=" + output_path, 
-            #"REFERENCE_SEQUENCE=applications/PicardSpace/private/genome.fa",
             "VALIDATION_STRINGENCY=LENIENT",
             "ASSUME_SORTED=true"]
         p = Popen(command, stdout=PIPE, stderr=PIPE)
@@ -235,10 +238,10 @@ class AppResult:
         """
         db = current.db
         # get BaseSpace API
-        app_ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-        user_row = db(db.auth_user.id==app_ssn_row.user_id).select().first() 
+        ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        user_row = db(db.auth_user.id==ssn_row.user_id).select().first() 
         app = db(db.app_data.id > 0).select().first()       
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_row.app_session_num, user_row.access_token)
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
         app_result = bs_api.getAppResultById(self.app_result_num)
         
         # upload files to BaseSpace

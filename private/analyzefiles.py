@@ -5,9 +5,9 @@ while True:
     for row in db(db.analysis_queue.status=='pending').select():
 
         # get queued app result from db
-        # note: assuming we're analyzing a single file per app result, for now
         f_row = db(db.bs_file.id==row.bs_file_id).select().first()
         ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
+        ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
 
         input_file = AnalysisInputFile(
             app_result_id=f_row.app_result_id,
@@ -21,8 +21,8 @@ while True:
             app_session_id=ar_row.app_session_id,
             project_num=ar_row.project_num,
             app_result_name=ar_row.app_result_name,
-            app_result_num=ar_row.app_result_num,
-            status=ar_row.status)
+            app_result_num=ar_row.app_result_num)
+            #status=ar_row.status)
             
         # run analysis and writeback results to BaseSpace
         try:
@@ -30,12 +30,13 @@ while True:
             status = fb.status
             message = fb.message
         except Exception as e:
-            # print error msg, update AppResult in db
             print "Error: {0}".format(str(e))
+
+            # update AppResult in db
             status = 'error'
             message = str(e)
             row.update_record(status='error')
-            ar_row.update_record(status='error', message=str(e))           
+            ssn_row.update_record(status='error', message=str(e))           
         # update analysis queue with analysis feedback
         row.update_record(status=status)
         row.update_record(message=message)
