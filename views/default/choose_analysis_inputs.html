@@ -2,20 +2,37 @@
 {{extend 'layout.html'}}
 
 <div class="page-header">
-  <h1>Choose Analysis Input</h1>
+  <h1>Choose AppResult Input</h1>
 </div>
 
 <p class="text-error lead">{{=err_msg}}</p>
 
 <form enctype="multipart/form-data" 
-    action="{{=URL('confirm_analysis_inputs')}}" method="post">
-    <legend>Please select a BAM file from Project {{=project_name}}:</legend>
-    {{for file in file_info:}}
+    action="{{=URL('choose_analysis_file')}}" method="post">
+        <legend>Please select an AppResult from Project {{=project_name}}:</legend>
+    
+    <! -- pre-check first radio button -->    
+    {{ first = 0 }}
+    {{for ar in ar_info:}}
         <label class="radio">
-            <input type="radio" name="file_choice" id="{{=file['file_name']}}" value="{{=file['app_result_num']}},{{=file['file_num']}}">
-            {{=file['file_name']}}
+            <input type="radio" name="ar_choice" id="{{=ar['app_result_name']}}" value="{{=ar['app_result_num']}}" {{ if first == 0:}}checked{{pass}}>
+            {{=ar['app_result_name']}}
+            {{ first+=1 }}
         </label>
     {{pass}}
+        <!-- horizontal divider -->
+        <ul class = "nav nav-list">
+            <li class="divider"></li>
+        </ul>        
+        <p>
+            {{if ar_start > 1:}}
+            <a href="{{=URL('choose_analysis_inputs', vars=dict(ar_offset=prev_offset, ar_limit=prev_limit))}}"><i class="icon-arrow-left"></i></a> 
+            {{pass}}
+            {{=ar_start}} - {{=ar_end}} of {{=ar_tot}} 
+            {{if ar_end < ar_tot:}}
+            <a href="{{=URL('choose_analysis_inputs', vars=dict(ar_offset=next_offset, ar_limit=next_limit))}}"><i class="icon-arrow-right"></i></a>
+            {{pass}}        
+        </p>
     <br/>
-    <button type="submit" class="btn btn-primary btn-large">Next...</button>
+    <button type="submit" class="btn btn-primary">Next...</button>
 </form>

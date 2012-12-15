@@ -99,12 +99,19 @@ def user_now_logged_in():
         return dict(message=T(message))
 
 
-
 @auth.requires_login()
 def choose_analysis_inputs():
     """
     Offers the user choice of files to analyze
     """
+    ar_offset = 0
+    ar_limit = 5
+    if request.get_vars.ar_offset:
+        ar_offset=int(request.get_vars.ar_offset)
+    if request.get_vars.ar_limit:
+        ar_limit=int(request.get_vars.ar_limit)
+    const_ar_limit = 5
+    
     # get project context that user launched from BaseSpace
     app_session_num = session.app_session_num
     project_num = session.project_num
@@ -116,34 +123,88 @@ def choose_analysis_inputs():
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(session.project_num)
     except Exception as e:
-        return dict(project_name="", file_info="", err_msg=str(e))        
+        return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", err_msg=str(e))        
     project_name = proj.Name    
 
-    # get all App Results for current Project
-    file_info = []    
-    try:                        
-        app_results = proj.getAppResults(bs_api)  # to limit to 10 result, add: myQp={'Limit':10}        
-        app_results = proj.getAppResults(bs_api, myQp={'Limit':3})
-    
-    except Exception as e:
-        return dict(project_name=project_name, file_info="", err_msg=str(e))        
-    
-    # get Files for each AppResult    
-    for result in app_results:       
-       try:
-           bs_files = result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
-       except Exception as e:
-           return dict(project_name=project_name, file_info="", err_msg=str(e))        
-    
-       # construct display name for each BAM file   
-       # TODO get Sample name (from relationship to AppResult)
-       for f in bs_files:           
-           file_info.append( { "file_name" : result.Name + " - " + f.Name + " (" + readable_bytes(f.Size) + ")",
-                               "file_num" : f.Id,
-                               "app_result_num" : result.Id } )                      
-    
-    return dict(project_name=project_name, file_info=file_info, err_msg="")
+    # get App Results for current Project, limited by limit and offset for performance
+    ar_info = []    
+    try:      
+        # app_result list is in condensed API form - no References, Genome                          
+        #app_results = proj.getAppResults(bs_api, myQp={'Limit':ar_limit,'Offset':ar_offset})
+        app_results = proj.getAppResults(bs_api, myQp={'Limit':1024})
+        ar_tot = len(app_results)
 
+        # don't allow indexing off end of app_results list
+        ar_end = ar_offset+ar_limit        
+        if ar_end > ar_tot:
+            ar_end = ar_tot                
+                                        
+        for n in range(ar_offset,ar_end):        
+            ar_short = app_results[n]
+            
+            # get full-form app_result from API to get Sample name (from relationship to AppResult)            
+            ar = bs_api.getAppResultById(ar_short.Id)
+            
+            # get Samples - this method calls API once for each Sample
+            samples = ar.getReferencedSamples(bs_api)
+
+            # build string of Sample names for display            
+            samples_names = []
+            for s in samples:
+                samples_names.append(s.Name)
+          
+            ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
+                              "app_result_num" : ar.Id } )                                                  
+    except Exception as e:
+        return dict(project_name=project_name, ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", err_msg=str(e))                                                                                                                                                                                 
+    
+    # calculate next and prev start/end                                                                                                                                        
+    next_offset = ar_end
+    next_limit = const_ar_limit    
+    prev_offset = ar_offset - const_ar_limit
+    prev_limit = const_ar_limit                                                                    
+    if next_offset > ar_tot:
+        next_offset = ar_tot    
+    if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        prev_offset = 0
+                                                                                                                                                                                                                
+    return dict(project_name=project_name, ar_info=ar_info, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, err_msg="")
+
+
+@auth.requires_login()
+def choose_analysis_file():
+    """
+    Offers the user choice of file to analyze
+    """
+    # get app_result_num that user selected    
+    if (request.post_vars['ar_choice']):
+        session.input_app_result_num = request.post_vars['ar_choice']
+    else:
+        return dict(app_result_name="", file_info="", err_msg="We have a problem - expected AppResult info but didn't receive it")                  
+            
+    # get list of BAM files for this AppResult from BaseSpace
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    app = db(db.app_data.id > 0).select().first()
+    try:
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)
+        app_result = bs_api.getAppResultById(session.input_app_result_num)
+        bs_files = app_result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
+    except Exception as e:
+        return dict(app_result_name="", file_info="", err_msg=str(e))     
+
+    # TODO if only 1 BAM file, offer different display?
+    
+    # TODO get Sample name from relationship to AppResult for display
+                
+    # construct display name for each BAM file   
+    file_info = []    
+    for f in bs_files:           
+        file_info.append( { "file_name" : f.Name + " (" + readable_bytes(f.Size) + ")",
+                            "file_num" : f.Id,
+                            "app_result_num" : app_result.Id } )                      
+    
+    return dict(app_result_name=app_result.Name, file_info=file_info, err_msg="")
+    
 
 @auth.requires_login()
 def confirm_analysis_inputs():

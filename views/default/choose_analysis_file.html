@@ -1,0 +1,25 @@
+{{navbar_enabled=True}}
+{{extend 'layout.html'}}
+
+<div class="page-header">
+  <h1>Choose Analysis File</h1>
+</div>
+
+<p class="text-error lead">{{=err_msg}}</p>
+
+<form enctype="multipart/form-data" 
+    action="{{=URL('confirm_analysis_inputs')}}" method="post">
+        <legend>Please select a BAM file from AppResult {{=app_result_name}} to run <a href="http://picard.sourceforge.net/">Picard's CollectAlignmentSummaryMetrics</a>:</legend>
+    
+    <! -- pre-check first radio button -->    
+    {{ first = 0 }}
+    {{for file in file_info:}}
+        <label class="radio">
+            <input type="radio" name="file_choice" id="{{=file['file_name']}}" value="{{=file['app_result_num']}},{{=file['file_num']}}" {{ if first == 0:}}checked{{pass}}>
+            {{=file['file_name']}}
+            {{ first+=1 }}
+        </label>
+    {{pass}}
+    <br/>
+    <button type="submit" class="btn btn-primary btn-large">Next...</button>
+</form>
