@@ -2,14 +2,14 @@
 {{extend 'layout.html'}}
 
 <div class="page-header">
-  <h1>Choose AppResult Input</h1>
+  <h1>Choose AppResult</h1>
 </div>
 
 <p class="text-error lead">{{=err_msg}}</p>
 
 <form enctype="multipart/form-data" 
     action="{{=URL('choose_analysis_file')}}" method="post">
-        <legend>Please select an AppResult from Project {{=project_name}}:</legend>
+        <legend>Please select an AppResult from Project '{{=project_name}}':</legend>
     
     <! -- pre-check first radio button -->    
     {{ first = 0 }}
@@ -26,11 +26,11 @@
         </ul>        
         <p>
             {{if ar_start > 1:}}
-            <a href="{{=URL('choose_analysis_inputs', vars=dict(ar_offset=prev_offset, ar_limit=prev_limit))}}"><i class="icon-arrow-left"></i></a> 
+            <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=prev_offset, ar_limit=prev_limit))}}"><i class="icon-arrow-left"></i></a> 
             {{pass}}
             {{=ar_start}} - {{=ar_end}} of {{=ar_tot}} 
             {{if ar_end < ar_tot:}}
-            <a href="{{=URL('choose_analysis_inputs', vars=dict(ar_offset=next_offset, ar_limit=next_limit))}}"><i class="icon-arrow-right"></i></a>
+            <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=next_offset, ar_limit=next_limit))}}"><i class="icon-arrow-right"></i></a>
             {{pass}}        
         </p>
     <br/>

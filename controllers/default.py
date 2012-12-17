@@ -27,6 +27,8 @@ def index():
     session.file_num = None
     session.file_name = None
     session.input_app_result_num = None
+    session.ar_offset = None
+    session.ar_limit = None
     
     main_msg = 'Welcome to PicardSpace'
     scnd_msg = ''
@@ -92,7 +94,7 @@ def user_now_logged_in():
 
         # get and record access_token for pre-selected item (e.g. Project)
         # if user already granted access, no oauth dialog will show
-        session.return_url = 'choose_analysis_inputs'
+        session.return_url = 'choose_analysis_app_result'
         session.scope = 'read'
         redirect(URL('get_auth_code'))
 
@@ -100,18 +102,22 @@ def user_now_logged_in():
 
 
 @auth.requires_login()
-def choose_analysis_inputs():
+def choose_analysis_app_result():
     """
-    Offers the user choice of files to analyze
+    Offers the user choice of AppResult to analyze
     """
     ar_offset = 0
-    ar_limit = 5
+    const_ar_limit = 5
+    ar_limit = const_ar_limit
     if request.get_vars.ar_offset:
         ar_offset=int(request.get_vars.ar_offset)
     if request.get_vars.ar_limit:
-        ar_limit=int(request.get_vars.ar_limit)
-    const_ar_limit = 5
-    
+        ar_limit=int(request.get_vars.ar_limit)    
+
+    # record offest and limit for 'back' link
+    session.ar_offset = ar_offset
+    session.ar_limit = ar_limit
+            
     # get project context that user launched from BaseSpace
     app_session_num = session.app_session_num
     project_num = session.project_num
@@ -129,7 +135,7 @@ def choose_analysis_inputs():
     # get App Results for current Project, limited by limit and offset for performance
     ar_info = []    
     try:      
-        # app_result list is in condensed API form - no References, Genome                          
+        # app_result list is in condensed API form - no References, Genome -- get these below                        
         #app_results = proj.getAppResults(bs_api, myQp={'Limit':ar_limit,'Offset':ar_offset})
         app_results = proj.getAppResults(bs_api, myQp={'Limit':1024})
         ar_tot = len(app_results)
@@ -179,8 +185,10 @@ def choose_analysis_file():
     # get app_result_num that user selected    
     if (request.post_vars['ar_choice']):
         session.input_app_result_num = request.post_vars['ar_choice']
-    else:
-        return dict(app_result_name="", file_info="", err_msg="We have a problem - expected AppResult info but didn't receive it")                  
+    
+    # check that session ar num is set (could've arrived from from back link)
+    if (not session.input_app_result_num):    
+        return dict(app_result_name="", file_info="", ar_limit="", ar_offset="", err_msg="We have a problem - expected AppResult info but didn't receive it")                  
             
     # get list of BAM files for this AppResult from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -190,11 +198,15 @@ def choose_analysis_file():
         app_result = bs_api.getAppResultById(session.input_app_result_num)
         bs_files = app_result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
     except Exception as e:
-        return dict(app_result_name="", file_info="", err_msg=str(e))     
-
-    # TODO if only 1 BAM file, offer different display?
+        return dict(app_result_name="", file_info="", ar_limit="", ar_offset="", err_msg=str(e))     
     
-    # TODO get Sample name from relationship to AppResult for display
+    # get Sample name from relationship to AppResult for display
+    samples = app_result.getReferencedSamples(bs_api)
+
+    # build string of Sample names for display            
+    samples_names = []
+    for s in samples:
+        samples_names.append(s.Name)                
                 
     # construct display name for each BAM file   
     file_info = []    
@@ -203,7 +215,9 @@ def choose_analysis_file():
                             "file_num" : f.Id,
                             "app_result_num" : app_result.Id } )                      
     
-    return dict(app_result_name=app_result.Name, file_info=file_info, err_msg="")
+    app_result_name=app_result.Name + " - " + ', '.join(samples_names)
+    
+    return dict(app_result_name=app_result_name, file_info=file_info, ar_limit=session.ar_limit, ar_offset=session.ar_offset, err_msg="")
     
 
 @auth.requires_login()
@@ -377,6 +391,8 @@ def start_analysis():
     session.file_num = None
     session.file_name = None
     session.input_app_result_num = None
+    session.ar_offset = None
+    session.ar_limit = None
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))
@@ -452,6 +468,7 @@ def view_alignment_metrics():
         return(dict(aln_tbl=tps_aln_tbl, 
             hdr=hdr,
             sample_name="", 
+            sample_num="",
             input_file_name="", 
             input_project_name="", 
             input_app_result_name="", 
@@ -485,6 +502,7 @@ def view_alignment_metrics():
             return(dict(aln_tbl=tps_aln_tbl, 
                 hdr=hdr, 
                 sample_name=sample.Name, 
+                sample_num=sample.Id,
                 input_file_name=input_file_row.file_name, 
                 input_project_name=input_project.Name, 
                 input_app_result_name=input_ar_row.app_result_name,  
@@ -528,8 +546,9 @@ def view_alignment_metrics():
     return(dict(aln_tbl=tps_aln_tbl, 
         hdr=hdr, 
         sample_name=sample.Name, 
+        sample_num=sample.Id,
         input_file_name=input_file_row.file_name, 
-        input_project_name=input_project.Name, 
+        input_project_name=input_project.Name,        
         input_app_result_name=input_ar_row.app_result_name,  
         output_app_result_name=output_ar_row.app_result_name, 
         output_project_name=output_project.Name, 

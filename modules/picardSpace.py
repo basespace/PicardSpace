@@ -225,7 +225,7 @@ class AppResult:
             self.output_files.append(f_stderr)
         
         # return true if picard return code was successful
-        # note: not handling returncode=None, which means process is still running
+        # note: not handling returncode=None, which means process may still be running
         if (p.returncode == 0):
             return(True)
         else:
