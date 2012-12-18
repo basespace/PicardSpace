@@ -6,8 +6,8 @@ while True:
     for row in db(db.download_queue.status=='pending').select():
 
         # get queued file from db
-        f_row = db(db.bs_file.id==row.bs_file_id).select().first()
-        ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
+        f_row = db(db.input_file.id==row.input_file_id).select().first()
+        ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
 
         # create a File object

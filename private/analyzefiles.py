@@ -5,8 +5,8 @@ while True:
     for row in db(db.analysis_queue.status=='pending').select():
 
         # get queued app result from db
-        f_row = db(db.bs_file.id==row.bs_file_id).select().first()
-        ar_row = db(db.app_result.input_file_id==f_row.id).select().first()
+        f_row = db(db.input_file.id==row.input_file_id).select().first()
+        ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
 
         input_file = AnalysisInputFile(
@@ -21,8 +21,7 @@ while True:
             app_session_id=ar_row.app_session_id,
             project_num=ar_row.project_num,
             app_result_name=ar_row.app_result_name,
-            app_result_num=ar_row.app_result_num)
-            #status=ar_row.status)
+            app_result_num=ar_row.app_result_num)        
             
         # run analysis and writeback results to BaseSpace
         try:

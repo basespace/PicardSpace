@@ -51,8 +51,8 @@ class AnalysisInputFile(File):
         Download file contents from BaseSpace and queue the file for analysis
         """           
         db = current.db  
-        # get input file and new app result info from database        
-        ar_row = db(db.app_result.input_file_id==self.bs_file_id).select().first()
+        # get input file and output app result info from database        
+        ar_row = db(db.output_app_result.input_file_id==self.bs_file_id).select().first()
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
         
         # update app session status
@@ -66,14 +66,14 @@ class AnalysisInputFile(File):
         local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
 
         # update file's local path
-        file_row = db(db.bs_file.id==self.bs_file_id).select().first()     
+        file_row = db(db.input_file.id==self.bs_file_id).select().first()     
         file_row.update_record(local_path=local_file)
         db.commit()               
         
         # add file to analysis queue
-        db.analysis_queue.insert(status='pending', bs_file_id=self.bs_file_id)
+        db.analysis_queue.insert(status='pending', input_file_id=self.bs_file_id)
 
-        # update app_result status to 'download complete, in analysis queue'
+        # update app_session status to 'download complete, in analysis queue'
         ssn_row.update_record(status="queued for analysis", message="download complete")
         db.commit()
 
@@ -251,12 +251,11 @@ class AppResult:
             bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
                 
             # add file to local db
-            bs_file_id = db.bs_file.insert(
+            bs_file_id = db.output_file.insert(
                     app_result_id=f.app_result_id,
                     file_num=bs_file.Id, 
                     file_name=f.file_name, 
-                    local_path=f.local_path, 
-                    io_type="output")               
+                    local_path=f.local_path)                                   
             db.commit()
 
 

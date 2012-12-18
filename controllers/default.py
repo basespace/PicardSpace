@@ -237,7 +237,7 @@ def confirm_analysis_inputs():
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         project = bs_api.getProjectById(session.project_num)
-        bs_file = bs_api.getFileById(session.file_num)
+        input_file = bs_api.getFileById(session.file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
 
         app_result = bs_api.getAppResultById(session.input_app_result_num)
@@ -246,7 +246,7 @@ def confirm_analysis_inputs():
         return dict(sample_name="", file_name="", project_name="", err_msg=str(e))        
 
     # get input file name
-    session.file_name = bs_file.Name
+    session.file_name = input_file.Name
     
     # get sample num and name from AppResult, if present
     sample_name = "unknown"
@@ -262,7 +262,7 @@ def confirm_analysis_inputs():
     session.return_url = 'start_analysis'
     session.scope = 'write'
     
-    return dict(sample_name=T(str(sample_name)), file_name=T(str(bs_file.Name)), project_name=T(str(project.Name)), err_msg="")        
+    return dict(sample_name=T(str(sample_name)), file_name=T(str(input_file.Name)), project_name=T(str(project.Name)), err_msg="")        
 
 
 @auth.requires_login()
@@ -346,12 +346,12 @@ def start_analysis():
         project = bs_api.getProjectById(session.project_num)
         input_app_result = bs_api.getAppResultById(session.input_app_result_num)
         sample = bs_api.getSampleById(session.sample_num)
-        new_app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+        output_app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
     
     # add input app_result to db
-    input_app_result_id = db.app_result.insert(
+    input_app_result_id = db.input_app_result.insert(
         project_num=session.project_num,
         app_result_name=input_app_result.Name,
         app_result_num=session.input_app_result_num,
@@ -359,25 +359,24 @@ def start_analysis():
     db.commit()
     
     # add input BAM file to db
-    bs_file_id = db.bs_file.insert(
+    input_file_id = db.input_file.insert(
         app_result_id=input_app_result_id,
         file_num=session.file_num, 
-        file_name=session.file_name,
-        io_type="input")           
+        file_name=session.file_name)
     db.commit()                    
                                                             
     # add new output AppResult to db            
-    new_app_result_id = db.app_result.insert(
+    output_app_result_id = db.output_app_result.insert(
         app_session_id=app_ssn_row.id,
         project_num=session.project_num,
         app_result_name=session.app_result_name,
-        app_result_num=new_app_result.Id,
+        app_result_num=output_app_result.Id,
         sample_num=session.sample_num,        
-        input_file_id=bs_file_id)             
+        input_file_id=input_file_id)             
     db.commit()
     
     # add BAM File to download queue 
-    db.download_queue.insert(status='pending', bs_file_id=bs_file_id)
+    db.download_queue.insert(status='pending', input_file_id=input_file_id)
     # update AppSession status
     app_ssn_row.update_record(status="input file queued for download")
     db.commit()    
@@ -422,7 +421,7 @@ def view_results():
     # get all app sessions for the current user    
     ssn_rows = db(db.app_session.user_id==auth.user_id).select(orderby=~db.app_session.date_created)
     for ssn_row in ssn_rows:
-        rslt_rows = db(db.app_result.app_session_id==ssn_row.id).select()
+        rslt_rows = db(db.output_app_result.app_session_id==ssn_row.id).select()
 
         # get project name for each AppResult    
         for rslt_row in rslt_rows:          
@@ -432,7 +431,7 @@ def view_results():
                 return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                                  
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
-            #    'sample_name':sample_name, 'file_name':bs_file.Name,                 
+            #    'sample_name':sample_name, 'file_name':input_file.Name,                 
         
     return dict(message=T(message), app_ssns=app_ssns, err_msg=T(err_msg))
 
@@ -453,9 +452,9 @@ def view_alignment_metrics():
     # get AppResult from db
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     ssn_row = db(db.app_session.id==app_session_id).select().first()
-    output_ar_row = db(db.app_result.app_session_id==app_session_id).select().first()        
-    input_file_row = db(db.bs_file.id==output_ar_row.input_file_id).select().first()
-    input_ar_row = db(db.app_result.id==input_file_row.app_result_id).select().first()
+    output_ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
+    input_file_row = db(db.input_file.id==output_ar_row.input_file_id).select().first()
+    input_ar_row = db(db.input_app_result.id==input_file_row.app_result_id).select().first()
     app = db(db.app_data.id > 0).select().first()    
                 
     # get Sample and Project from BaseSpace
@@ -477,8 +476,7 @@ def view_alignment_metrics():
             err_msg=T(str(e))))
 
     # get output file info from db    
-    f_rows = db((db.bs_file.app_result_id==output_ar_row.id)
-        & (db.bs_file.io_type=='output')).select()        
+    f_rows = db(db.output_file.app_result_id==output_ar_row.id).select()
     f_row = None
     for row in f_rows:
         # find file with aln metrics extension

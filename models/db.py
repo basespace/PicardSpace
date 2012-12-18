@@ -279,26 +279,53 @@ db.define_table('app_session',
     Field('status'),                    
     Field('message'))                   # detail about AppSession status
 
-db.define_table('app_result',           # newly created AppResult for PicardSpace's output files
-    Field('app_session_id', db.app_session),
-    Field('app_result_name'),
-    Field('app_result_num'),
-    Field('project_num'),               # the Project that contains this app result in BaseSpace
-    Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
-    Field('input_file_id'))# db.bs_file), # the File that was used as an input to this AppResult, if any (BAM for picardSpace)    
+#db.define_table('app_result',           # newly created AppResult for PicardSpace's output files
+#    Field('app_session_id', db.app_session),
+#    Field('app_result_num'),
+#    Field('app_result_name'),
+#    Field('project_num'),               # the Project that contains this app result in BaseSpace
+#    Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
+#    Field('input_file_id'))# db.bs_file), # the File that was used as an input to this AppResult, if any (BAM for picardSpace)    
 
-db.define_table('bs_file',
-    Field('app_result_id', db.app_result), # the AppResult that contains this File in BaseSpace
+db.define_table('input_app_result',     # newly created AppResult for PicardSpace's output files
+#    Field('app_session_id', db.app_session),
+    Field('app_result_num'),
+    Field('app_result_name'),
+    Field('project_num'),               # the Project that contains this app result in BaseSpace
+    Field('sample_num'))                # the Sample that has a relationship to this AppResult, if any
+
+db.define_table('input_file',
+    Field('app_result_id', db.input_app_result), # the AppResult that contains this File in BaseSpace
     Field('file_num'),
     Field('file_name'),
-    Field('local_path'),
-    Field('io_type'))                    # 'input' or 'output' from an appResult
+    Field('local_path'))    
+
+db.define_table('output_app_result',    # newly created AppResult for PicardSpace's output files
+    Field('app_session_id', db.app_session),
+    Field('app_result_num'),
+    Field('app_result_name'),
+    Field('project_num'),               # the Project that contains this app result in BaseSpace
+    Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
+    Field('input_file_id'), db.input_file) # the File that was used as an input to this AppResult, if any (BAM for picardSpace)   
+
+#db.define_table('bs_file',
+#    Field('app_result_id', db.app_result), # the AppResult that contains this File in BaseSpace
+#    Field('file_num'),
+#    Field('file_name'),
+#    Field('local_path'),
+#    Field('io_type'))                    # 'input' or 'output' from an appResult
+
+db.define_table('output_file',
+    Field('app_result_id', db.output_app_result), # the AppResult that contains this File in BaseSpace
+    Field('file_num'),
+    Field('file_name'),
+    Field('local_path'))
 
 db.define_table('download_queue',
     Field('status'),
-    Field('bs_file_id', db.bs_file))
+    Field('input_file_id', db.input_file))
         
 db.define_table('analysis_queue',
     Field('status'),
     Field('message'),
-    Field('bs_file_id', db.bs_file))
+    Field('input_file_id', db.input_file))
