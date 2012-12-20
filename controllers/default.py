@@ -408,8 +408,8 @@ def view_results():
     err_msg = ""
     message = ""
     if request.get_vars.message:
-        message = request.get_vars.message
-
+        message = request.get_vars.message    
+    
     # get BaseSpace API
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()

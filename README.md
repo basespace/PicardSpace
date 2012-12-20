@@ -34,5 +34,18 @@ Redirect URI: localhost:8000/PicardSpace
 6. Go to BaseSpace.com and launch your new app from any Project that contains an AppResult with a BAM file.
 
 
-Known Issues
+Production Deployment
 ============
+1. Write error tickets to the db instead of the file system. To accomplish this, create a file named applications/PicardSpace/private/ticket_storage.txt that contains information about your database, such as:
+sqlite://storage.sqlite
+
+Also run this script in the background, which will transfer tickets from the local file system to the db every 5 minutes:
+        python web2py.py -S PicardSpace -M -R scripts/tickets2db.py &
+
+(for details visit: http://web2py.com/book/default/chapter/13#Collecting-tickets)
+
+2. Purge web session data every 1 hour, since this can pile up over time.
+Due to a bug in web2py v2.1.2, this command current works only with v2.3.2.
+        python web2py.py -S PicardSpace -M -R scripts/sessions2trash.py -A -x 3600 -f -v &
+
+

@@ -4,6 +4,9 @@ db = DAL('sqlite://storage.sqlite')
 from gluon import current
 current.db = db
 
+# store sessions in the db instead on the file system
+session.connect(request, response, db)
+
 ## by default give a view/generic.extension to all actions from localhost
 ## none otherwise. a pattern can be 'controller/function.extension'
 response.generic_patterns = ['*'] if request.is_local else []
