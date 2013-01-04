@@ -231,6 +231,9 @@ def confirm_analysis_inputs():
     else:
         return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
 
+    # TODO check that project is writeable
+    
+    
     # get name of file and project and referenced sample from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()
