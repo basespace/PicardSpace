@@ -270,3 +270,29 @@ def readable_bytes(size,precision=2):
         suffixIndex += 1 #increment the index of the suffix
         size = size/1024.0 #apply the division
     return "%.*f %s"%(precision,size,suffixes[suffixIndex])
+    
+
+def get_auth_code_util(scope):
+    """
+    Initiate OAuth2 to get auth code for the given scope
+    """
+    app = current.db(current.db.app_data.id > 0).select().first()
+    bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, current.session.app_session_num)
+    
+    userUrl = bs_api.getWebVerificationCode(scope,app.redirect_uri)
+    redirect(userUrl)
+
+        
+def get_access_token_util(auth_code):
+    """
+    Given an auth code, retrieve and return the access token from BaseSpace
+    """            
+    app = current.db(current.db.app_data.id > 0).select().first()    
+    bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,current.session.app_session_num)
+    
+    bs_api.updatePrivileges(auth_code)      
+    access_token =  bs_api.getAccessToken()   
+    
+    # set token in session var
+    current.session.token = access_token                  
+    return access_token

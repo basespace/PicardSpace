@@ -3,13 +3,130 @@
 import os.path
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
-from picardSpace import File, readable_bytes
+from picardSpace import File, readable_bytes, get_auth_code_util, get_access_token_util
 import shutil
 
 # Auth notes:
 # 1. All '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called (all methods except index() )
 # 2. Once a user is logged into picardSpace, they can use their existing tokens to view the results -- even if they log out of BaseSpace -- because tokens are good regardless of BaseSpace login
 #
+
+def clear_session_vars():
+    """
+    Clear all session variables
+    """
+    session.app_session_num = None
+    session.project_num = None
+    session.scope = None                   # scope for OAuth2, non-login
+    session.login_scope = None             # scope for OAuth2 during login
+    session.app_result_name = None
+    session.file_num = None
+    session.file_name = None
+    session.input_app_result_num = None
+    session.ar_offset = None
+    session.ar_limit = None
+    session.return_url = None 
+    session.in_login = False  
+    session.token = None
+
+
+def handle_redirect_uri():
+    """
+    """    
+    # handle api errors
+    if (request.get_vars.error):
+        err_msg = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_message)
+        return dict(err_msg=err_msg)                    
+        
+    # handle case: just launched from BaseSpace 
+    if (request.get_vars.appsessionuri):
+                
+        # clear all session variables
+        clear_session_vars()
+        
+        # record app session number
+        appsessionuri = request.get_vars.appsessionuri
+        session.app_session_num = os.path.basename(appsessionuri)
+    
+        # get app session num from BaseSpace
+        app = db(db.app_data.id > 0).select().first()
+        try:
+            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
+            app_ssn = bs_api.getAppSession()     
+        except Exception as e:
+            return dict(err_msg=str(e))            
+        
+        # get the project num and access string of pre-selected Project
+        ssn_ref = app_ssn.References[0]
+        if (ssn_ref.Type != 'Project'):
+            return dict(err_msg="Error - unrecognized reference type " + ssn_ref.Type + ". ")
+        else:            
+            ref_content = ssn_ref.Content
+            session.project_num = ref_content.Id
+            session.login_scope = ref_content.getAccessStr(scope='read')
+            
+            # create app_session in db
+            app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
+                project_num=session.project_num,
+                date_created=app_ssn.DateCreated,
+                status="newly created")
+            
+            # log user into PicardSpace (user should already be logged into BaseSpace)
+            # TODO change to be an actual url, as the name suggests, not just a controller name?
+            session.return_url = 'user_now_logged_in'
+            #redirect(URL('user/login'))
+            # TODO not clear if _next is needed here
+            #redirect( URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')) ) )
+            redirect( URL('user', args=['login']) )
+                                                                                                                                                                                                                                                                                                                                                                                              
+
+    # handle OAuth2 response - exchange authorization code for auth token
+    if (request.get_vars.code):
+        
+        # complete login, if login is in progress
+        if session.in_login:
+            #redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code, _next=URL(session.return_url)) ) )
+            redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code) ) )
+            # TODO update user token for login session (code elsewhere)
+
+        # otherwise, handle standard OAuth2 response
+        auth_code = request.get_vars.code                
+        
+        # TODO swap this out for get_access_token_util()
+        app_session_num = session.app_session_num
+        app = db(db.app_data.id > 0).select().first()
+        try:
+            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,app_session_num)
+            bs_api.updatePrivileges(auth_code)      
+            access_token =  bs_api.getAccessToken()      
+        except Exception as e:
+            return dict(err_msg=str(e))
+
+        # ensure the current app user is the same as the current BaseSpace user        
+        user_row = db(db.auth_user.id==auth.user_id).select().first()
+        cur_user_id = user_row.username
+        try:
+            bs_user = bs_api.getUserById('current')
+        except Exception as e:
+            return dict(err_msg=str(e))
+
+        if (bs_user.Id != cur_user_id):
+            return dict(err_msg="Error - mismatch between PicardSpace user id of " + str(cur_user_id) + " and current BaseSpace user id of " + str(bs_user.Id) + ". Please re-login to PicardSpace.")
+                               
+        # update user's access token in user table
+        user_row.update_record(access_token=access_token)
+            
+        # go to url specified by original call to get token
+        redirect(URL(session.return_url))            
+
+    # shouldn't reach this point            
+    return dict(err_msg="Error - didn't recognize query variables")
+    
+# TODO slim down index() so doesn't capture session id
+# TODO remove get_access_token()?                        
+             
+                                
+
 
 def index():
     """
@@ -20,61 +137,59 @@ def index():
     response.subtitle = "Home Page"
 
     # clear existing session vars 
-    session.app_session_num = None
-    session.project_num = None
-    session.scope = None
-    session.app_result_name = None
-    session.file_num = None
-    session.file_name = None
-    session.input_app_result_num = None
-    session.ar_offset = None
-    session.ar_limit = None
+    clear_session_vars()
     
     main_msg = 'Welcome to PicardSpace'
     scnd_msg = ''
     err_msg  = ''
     
     # record app session number if provided
-    if (request.get_vars.appsessionuri):
-        appsessionuri = request.get_vars.appsessionuri
-        session.app_session_num = os.path.basename(appsessionuri)
+#    if (request.get_vars.appsessionuri):
+#        appsessionuri = request.get_vars.appsessionuri
+#        session.app_session_num = os.path.basename(appsessionuri)
          
         # get app session num from BaseSpace
-        app = db(db.app_data.id > 0).select().first()
-        try:
-            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
-            app_ssn = bs_api.getAppSession()     
-        except Exception as e:
-            return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(str(e)))            
+#        app = db(db.app_data.id > 0).select().first()
+#        try:
+#            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
+#            app_ssn = bs_api.getAppSession()     
+#        except Exception as e:
+#            return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(str(e)))            
 
         # get the project num and access string of pre-selected Project
-        ssn_ref = app_ssn.References[0]
-        if (ssn_ref.Type != 'Project'):
-            err_msg += "Error - unrecognized reference type " + ssn_ref.Type + ". "
-        else:            
-            ref_content = ssn_ref.Content
-            session.project_num = ref_content.Id
-            session.scope = ref_content.getAccessStr(scope='read')
+#        ssn_ref = app_ssn.References[0]
+#        if (ssn_ref.Type != 'Project'):
+#            err_msg += "Error - unrecognized reference type " + ssn_ref.Type + ". "
+#        else:            
+#            ref_content = ssn_ref.Content
+#            session.project_num = ref_content.Id
+#            session.scope = ref_content.getAccessStr(scope='read')
             
             # create app_session in db
-            app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
-                project_num=session.project_num,
-                date_created=app_ssn.DateCreated,
-                status="newly created")
+#            app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
+#                project_num=session.project_num,
+#                date_created=app_ssn.DateCreated,
+#                status="newly created")
                 
             # user should already be logged into BaseSpace, so redirect to logged-in screen
-            redirect(URL('user_now_logged_in'))
+#            redirect(URL('user_now_logged_in'))
         
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
         redirect(URL('user_now_logged_in'))       
 
+    session.return_url = 'user_now_logged_in'    
+    
     # construct login_url for login link
-    # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'    
+    # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'
+    # TODO for login button on index page, should actually go to temp page that sets session.login_scope="" from None, then redirects to login()
     if (request.is_local):
         login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True, port=8000)
+        #login_url = URL('user', args=['login'], scheme=True, host=True, port=8000)
     else:
         login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True)
+        #login_url = URL('user', args=['login'], scheme=True, host=True)
+
                                     
     return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg), login_url=login_url)
 
@@ -87,16 +202,23 @@ def user_now_logged_in():
     # determine if the user pre-selected a sample/app_result/project to analyze
     if (not session.app_session_num):
         redirect(URL('view_results'))
-    else:
+    else:            
         # an app session num was provided, update app session with user info
         app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
         app_ssn_row.update_record(user_id=auth.user_id)
 
+        # record access token from login (needed since web2py will only record token on very first login)
+        if session.token:
+            user_row = db(db.auth_user.id==auth.user_id).select().first()
+            user_row.update_record(access_token=session.token)
+            session.token = None
+
         # get and record access_token for pre-selected item (e.g. Project)
         # if user already granted access, no oauth dialog will show
-        session.return_url = 'choose_analysis_app_result'
-        session.scope = 'read'
-        redirect(URL('get_auth_code'))
+        #session.return_url = 'choose_analysis_app_result'
+        #session.scope = 'read'
+        #redirect(URL('get_auth_code'))
+        redirect(URL('choose_analysis_app_result'))
 
         return dict(message=T(message))
 
@@ -280,18 +402,23 @@ def get_auth_code():
     scope = session.scope + ' project ' + str(session.project_num)
     
     # if on localhost, add port 8000 since likely using web2py Rocket server    
-    if (request.is_local):
-        redirect_uri = URL('get_access_token', scheme=True, host=True, port=8000)
-    else:
-        redirect_uri = URL('get_access_token', scheme=True, host=True)
+#    if (request.is_local):
+#        redirect_uri = URL('get_access_token', scheme=True, host=True, port=8000)        
+#    else:
+#        redirect_uri = URL('get_access_token', scheme=True, host=True)
 
-    app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num)
-        userUrl = bs_api.getWebVerificationCode(scope,redirect_uri)
+        get_auth_code_util(scope)
     except Exception as e:
         return dict(err_msg=str(e))
-    redirect(userUrl)    
+    
+    #app = db(db.app_data.id > 0).select().first()
+    #try:
+    #    bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num)
+    #    userUrl = bs_api.getWebVerificationCode(scope,redirect_uri)
+    #except Exception as e:
+    #    return dict(err_msg=str(e))
+    #redirect(userUrl)    
 
 
 @auth.requires_login()
@@ -302,18 +429,23 @@ def get_access_token():
     # handle api errors
     if (request.get_vars.error):
         message = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_message)
-        return dict(message=T(message))            
-        
-    # exchange authorization code for auth token
-    auth_code = request.get_vars.code
-    app_session_num = session.app_session_num
-    app = db(db.app_data.id > 0).select().first()
+        return dict(message=T(message))                    
+    
+    # exchange authorization code for auth token            
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,app_session_num)
-        bs_api.updatePrivileges(auth_code)      
-        access_token =  bs_api.getAccessToken()      
+        access_token = get_access_token_util(request.get_vars.code)
     except Exception as e:
         return dict(err_msg=str(e))
+                            
+    #auth_code = request.get_vars.code
+    #app_session_num = session.app_session_num
+    #app = db(db.app_data.id > 0).select().first()
+    #try:
+    #    bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,app_session_num)
+    #    bs_api.updatePrivileges(auth_code)      
+    #    access_token =  bs_api.getAccessToken()      
+    #except Exception as e:
+    #    return dict(err_msg=str(e))
 
     # ensure the current app user is the same as the current BaseSpace user        
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -384,21 +516,11 @@ def start_analysis():
     app_ssn_row.update_record(status="input file queued for download")
     db.commit()    
     
-    
     # clear session vars
-    session.app_session_num = None
-    session.project_num = None
-    session.scope = None  
-    session.app_result_name = None
-    session.file_num = None
-    session.file_name = None
-    session.input_app_result_num = None
-    session.ar_offset = None
-    session.ar_limit = None
+    clear_session_vars()
 
     # redirect user to view_results page -- with message that their analysis started
-    redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))
-    
+    redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))    
     
 
 @auth.requires_login()
