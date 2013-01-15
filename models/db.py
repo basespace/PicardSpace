@@ -79,23 +79,29 @@ if not app_data:
 
 
 # define class for web2py login with BaseSpace credentials 
-# used only at initial log-in, not for other BaseSpace Oauth2 requests
-# TODO remove some of these when finished integrating BaseSpace API/SDK methods
-import json
-from urllib import urlencode
-import urllib2
 from picardSpace import get_auth_code_util, get_access_token_util
-
 
 class BaseSpaceAccount(object):
     """
     OAuth2 implementation for BaseSpace
-    Populates local auth_user db table with BaseSpace user name, email, and BaseSpace id.
-    If the user logs into picardSpace.com directly, only user info is requested from BaseSpace.
-    If the user launches from BaseSpace, then the pre-selected item context is also requested (via oauth scope).
-    The resulting access token, however, is not recorded in the auth_user table. This token is recorded downstream
-    in a controller after re-requesting item Read context. The reason is that it's unclear how to update auth_user
-    table entries for existing users (without hacking tool.py core web2py code).
+    
+    When login() (in gluon/tools.py) is called, get_user() is called first to determine if a user is logged in, 
+    and if not then login_url() is called to log the user into BaseSpace via Oauth2.
+    
+    During Oauth2, an auth code if first requested, which returns control to BaseSpace. 
+    BaseSpace redirects to the redirect_uri, which is handled by a controller method, 
+    which in turn calls login() again to return here, where the auth code is traded for an access token.
+    
+    Web2py only records in the db the first access token ever encountered for a user (in addition to user name, email, and BaseSpace id). 
+    For subsequent tokens, the token is store in a session var, 
+    and the token is store in in the db in a controller method immeadietely after login() completes.
+    
+    Login() is called by the following cases:
+    1. User launched from BaseSpace
+    2. User logs in with 'login' button on index page (outside BaseSpace)
+    3. Decorators - the controller method decorators @requires_login calls login when a user isn't logged when the method is called    
+    
+    Note that there is a 2nd non-login method of launching Oauth2 that is implemented in controller methods.
     """
     def __init__(self):
         app = db(db.app_data.id > 0).select().first()
@@ -111,7 +117,9 @@ class BaseSpaceAccount(object):
 
     def get_user(self):
         """
-        Returns the user using the BaseSpace API            
+        Returns info about the user that is currently logged into PicardSpace. 
+        If no user is logged in, and we have a new access token from a login attempt, call the BaseSpace API to get info about the current user.
+        Otherwise return None.       
         """
         # if a user is already logged in, return user info from db
         if current.session.auth:
@@ -125,15 +133,15 @@ class BaseSpaceAccount(object):
         # if we have a new token, get current user info
         if self.session.token:
             
-            # not supplying app session num here since not necessarily launched from a BaseSpace session
+            app_ssn_num = ""
             app = db(db.app_data.id > 0).select().first()
-            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,"", self.session.token)
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, self.session.token)
         
             user = None
             #try:
             user = bs_api.getUserById("current")
             #except:
-                # TODO how to handle this error?
+                # TODO how to handle this error? need to handle here since get_user isn't wrapped with try except in web2py login(); redirect to error page? can't just return None since this will end in redirect loop (endless login attempts)
                 #self.session.token = None            
         
             if user:
@@ -145,115 +153,16 @@ class BaseSpaceAccount(object):
         # user isn't logged in, return None        
         return None
         
-        #if not self.accessToken():
-        #    return None               
-        #redirect( URL('index', vars=dict(test="in get user") ) )
-                                                                                                
-            
-    #def __build_url_opener(self, uri):
-    #    """Build the url opener for managing HTTP Basic Athentication"""
-    #    # Create an OpenerDirector with support for Basic HTTP Authentication...
-    #    auth_handler = urllib2.HTTPBasicAuthHandler()
-    #    auth_handler.add_password(None,
-    #                              uri,
-    #                              self.client_id,
-    #                              self.client_secret)
-    #    opener = urllib2.build_opener(auth_handler)
-    #    return opener
-
-
-    #def accessToken(self):
-    #    """        
-    #    TODO        
-    #    """
-        #Return the access token generated by the authenticating server.
-        #If token is already in the session that one will be used.
-        #Otherwise the token is fetched from the auth server.
-        
-        #if self.session.token and self.session.token.has_key('expires'):
-        #    expires = self.session.token['expires']
-        #    # reuse token until expiration
-        #    if expires == 0 or expires > time.time():
-        #                return self.session.token['access_token']
-
-        # exchange auth code for access token                                                                                                                              
-        # TODO remove session.code and just use request.vars.code?
-   #     if self.session.code:                        
-            # TODO how to handle exception here?            
-   #         access_token = get_access_token_util(self.session.code)           
-   #         del self.session.code             
-            # TODO do we need to add anything from self.args? I don't think so            
-            #self.session.token['expires'] = 0
-            # TODO why return token here? caller doesn't seem to need it (__oauth_login)
-   #         return access_token            
-
-        # if not yet logged in, return no access token; 
-        # TODO likely called from get_user() before initial login is complete?        
-   #     if not current.session.auth:
-   #         return None
-        
-        # user has already logged in, return token from db for current user
-   #     user_row = db(db.auth_user.id==auth.user_id).select().first()
-   #     return user_row.access_token
-        #if self.session.token:
-        #    return self.session.token                        
-        
-        #self.session.token = None
-        #return None
-            
-            #data = dict(client_id=self.client_id,
-            #           client_secret=self.client_secret,
-            #           redirect_uri=self.session.redirect_uri,
-            #           response_type='token', 
-            #           code=self.session.code,
-            #           grant_type='authorization_code')
-            #           # BaseSpace mod: added grant_type
-
-
-            #if self.args:
-            #    data.update(self.args)
-            #open_url = None
-            #opener = self.__build_url_opener(self.token_url)
-            #try:
-            #    open_url = opener.open(self.token_url, urlencode(data))
-            #except urllib2.HTTPError, e:
-            #    raise Exception(e.read())
-            #finally:
-            #    del self.session.code # throw it away
-
-            #if open_url:
-            #    try:
-            #        # BaseSpace mod: BS uses json, old code used query str
-            #        tokendata = json.loads(open_url.read())
-            #        self.session.token = tokendata                    
-
-            #        # remove state variable now that we have the login token
-            #        session.in_login = False
-                    
-            #        # set expiration absolute time try to avoid broken
-            #        # implementations where "expires_in" becomes "expires"
-            #        if self.session.token.has_key('expires_in'):
-            #            exps = 'expires_in'
-            #        else:
-            #            exps = 'expires'
-            #        # BaseSpace mod: editing expires since BaseSpace doesn't return this                    
-            #        self.session.token['expires'] = 0
-
-            #    finally:
-            #        opener.close()
-            #    return self.session.token['access_token']
-
-        #self.session.token = None
-        #return None
-
 
     def __oauth_login(self, next):
         '''
-        handle errors from BaseSpace during login
-        handle just launched from BaseSpace, get auth code, not yet logged into PicardSpace
-        don't handle just launched from BaseSpace, get auth code, already logged into PicardSpace
-        handle decorator, check that user is logged in
-        handle login button on index page (actually go to temp page that sets session.login_scope="" from None, then redirects to login())                                           
+        If we just received an auth_code from BaseSpace, exchange this for an access token.
+        (Since web2py won't update the token for an existing user, 
+        set the token in a session var and once login is complete we'll store the token in the user table in the db.)
+        
+        Otherwise, start Oauth2 by requesting an auth code from BaseSpace.
+        (BaseSpace will redirect to the redirect_uri, handled in our controller, 
+        which will again call login() and we'll end up in this method again to handle the auth code)                                                        
         '''        
         # handle errors from BaseSpace during login        
         if self.request.vars.error:
@@ -263,96 +172,27 @@ class BaseSpaceAccount(object):
                 
         # just received auth code from BaseSpace, trade it for an access token
         if self.request.vars.code:            
-            #self.session.code = self.request.vars.code
             self.session.token = get_access_token_util(self.request.vars.code)           
-            #self.accessToken()
             
             # reset login state vars
             self.session.login_scope = None
             self.session.in_login = False
-            
-            # TODO why return code here? Caller doesn't seem to record it (login_url)
-            #return self.session.code
             return
-
-        ## handle decorators that check if a user is logged in (but shouldn't do full Oauth2)
-        #if session.login_scope == None:            
-        #    # if a user already logged in once, then redirect to 'next' page
-        #    # TODO is this the correct return value? what to return if the user is not logged in?
-        #    if current.session.auth:
-        #        return True
-        #    else:
-        #        return None
-                
+                        
         # start Oauth2 - get an auth code for this login, handles launch from BaseSpace and PicardSpace login button
-        # TODO if user is already logged into PicardSpace, check that current BS user matches
-                                                                        
-        # set url to return to after being redirected back from BaseSpace                
-        #session.return_url = next                
-                
+        # TODO if user is already logged into PicardSpace, check that current BS user matches                                                                                            
         # adding state var so can return to login process from redirect uri 
         self.session.in_login = True
 
         # redirect to BaseSpace to get auth code -- will return to redirect_uri
-        # TODO how to handle exception here?                                        
-        # TODO move empty scope check into get_auth_code_util()
-        scope = ""
-        if self.session.login_scope:
-            scope = self.session.login_scope
-        get_auth_code_util(scope) 
-                                
-                #self.session.redirect_uri=self.__redirect_uri(next)
-                #data = dict(redirect_uri=self.session.redirect_uri,
-                #                  response_type='code',
-                #                  client_id=self.client_id)
-                # BaseSpace mod: adding scope for project browse in addtn to login
-                #if self.session.scope:
-                #    data['scope'] = self.session.scope
-                                                
-                #if self.args:
-                #    data.update(self.args)
-                #auth_request_url = self.auth_url + "?" +urlencode(data)
-                #HTTP = self.globals['HTTP']
-                #raise HTTP(307,
-                #           "You are not authenticated: you are being redirected to the <a href='" + auth_request_url + "'> authentication server</a>",
-                #           Location=auth_request_url)                           
-        #return None
-
-
-#    def __redirect_uri(self, next=None):
-#        """Build the uri used by the authenticating server to redirect
-#        the client back to the page originating the auth request.
-#        Appends the _next action to the generated url so the flows continues.
-#        """                
-        #session.return_url = 'http://localhost:8000/PicardSpace/default/user_now_logged_in'        
-        #return 'http://localhost:8000/PicardSpace/default/handle_redirect_uri'        
-        
-        
-        # set redirect uri
-#        if (self.request.is_local):                    
-#            return( URL('handle_redirect_uri', scheme=True, host=True, port=8000) )
-#        else:        
-#            return( URL('handle_redirect_uri', scheme=True, host=True) )
-        
-        
-#        r = self.request
-#        http_host=r.env.http_x_forwarded_for
-#        if not http_host: http_host=r.env.http_host
-
-#        url_scheme = r.env.wsgi_url_scheme
-#        if next:
-#            path_info = next
-#        else:
-#            path_info = r.env.path_info
-#        uri = '%s://%s%s' %(url_scheme, http_host, path_info)
-#        if r.get_vars and not next:
-#            uri += '?' + urlencode(r.get_vars)
-#        return uri
+        # TODO how to handle exception here?                                                
+        get_auth_code_util(self.session.login_scope)                                  
 
 
     def login_url(self, next="/"):
         """
-        If a user isn't logged in yet (get_user returned None), then this is the entry point for all login() attempts, including failed '@requires_login' method decorators
+        If a user isn't logged in yet (get_user() returned None), then this is the entry point for Oauth2. 
+        This is includes call from '@requires_login' method decorators when a user isn't logged in.
         """            
         self.__oauth_login(next)
         return
@@ -380,14 +220,6 @@ db.define_table('app_session',
     Field('status'),                    
     Field('message'))                   # detail about AppSession status
 
-#db.define_table('app_result',           # newly created AppResult for PicardSpace's output files
-#    Field('app_session_id', db.app_session),
-#    Field('app_result_num'),
-#    Field('app_result_name'),
-#    Field('project_num'),               # the Project that contains this app result in BaseSpace
-#    Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
-#    Field('input_file_id'))# db.bs_file), # the File that was used as an input to this AppResult, if any (BAM for picardSpace)    
-
 db.define_table('input_app_result',     # newly created AppResult for PicardSpace's output files
 #    Field('app_session_id', db.app_session),
     Field('app_result_num'),
@@ -409,12 +241,6 @@ db.define_table('output_app_result',    # newly created AppResult for PicardSpac
     Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
     Field('input_file_id'), db.input_file) # the File that was used as an input to this AppResult, if any (BAM for picardSpace)   
 
-#db.define_table('bs_file',
-#    Field('app_result_id', db.app_result), # the AppResult that contains this File in BaseSpace
-#    Field('file_num'),
-#    Field('file_name'),
-#    Field('local_path'),
-#    Field('io_type'))                    # 'input' or 'output' from an appResult
 
 db.define_table('output_file',
     Field('app_result_id', db.output_app_result), # the AppResult that contains this File in BaseSpace

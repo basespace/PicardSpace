@@ -276,6 +276,8 @@ def get_auth_code_util(scope):
     """
     Initiate OAuth2 to get auth code for the given scope
     """
+    if not scope:
+        scope = ""
     app = current.db(current.db.app_data.id > 0).select().first()
     bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, current.session.app_session_num)
     
