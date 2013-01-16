@@ -63,13 +63,12 @@ db.define_table('app_data',
     #Field('auth_url', default='https://basespace.illumina.com/oauth/authorize'),
     #Field('token_url', default='https://api.basespace.illumina.com/v1pre3/oauthv2/token/'),
     Field('client_id', default='9aec318fb4f7467fbfe2f88c9a3632aa'),                               # portal hoth
-    Field('client_secret', default='edb478361af843b888dbf206ea1bedff'),                           # portal hoth
+    Field('client_secret', default='68dae26dd15c4ce8a186f02d83853e73'),                           # portal hoth    
     Field('baseSpaceUrl', default='https://api.cloud-hoth.illumina.com/'),                        # portal hoth
     Field('version', default='v1pre3'),
     Field('auth_url', default='https://cloud-hoth.illumina.com/oauth/authorize'),                 # portal hoth
-    Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),      # portal hoth
-    
-    Field('redirect_uri', default='http://localhost:8000/PicardSpace/default/handle_redirect_uri'), # 
+    Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),      # portal hoth    
+    Field('redirect_uri', default=''),
     Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
 
 # create an instance of app_data table if not present
@@ -154,7 +153,7 @@ class BaseSpaceAccount(object):
         return None
         
 
-    def __oauth_login(self, next):
+    def __oauth_login(self):
         '''
         If we just received an auth_code from BaseSpace, exchange this for an access token.
         (Since web2py won't update the token for an existing user, 
@@ -164,6 +163,17 @@ class BaseSpaceAccount(object):
         (BaseSpace will redirect to the redirect_uri, handled in our controller, 
         which will again call login() and we'll end up in this method again to handle the auth code)                                                        
         '''        
+        # set redirect_uri if it isn't set yet (only done on very first login)
+        app = db(db.app_data.id > 0).select().first()
+        if not app.redirect_uri:
+            if (current.request.is_local):                
+                redirect_uri = URL('handle_redirect_uri', scheme=True, host=True, port=8000)
+            else:                
+                redirect_uri = URL('handle_redirect_uri', scheme=True, host=True)
+            app.update_record(redirect_uri=redirect_uri)
+            db.commit()
+        
+        
         # handle errors from BaseSpace during login        
         if self.request.vars.error:
             # TODO is this the best way to handle this error?
@@ -194,7 +204,7 @@ class BaseSpaceAccount(object):
         If a user isn't logged in yet (get_user() returned None), then this is the entry point for Oauth2. 
         This is includes call from '@requires_login' method decorators when a user isn't logged in.
         """            
-        self.__oauth_login(next)
+        self.__oauth_login()
         return
 
     def logout_url(self, next="/"):
