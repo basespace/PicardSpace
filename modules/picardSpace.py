@@ -163,10 +163,15 @@ class AppResult:
             user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
             app = db(db.app_data.id > 0).select().first()
             
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
-            app_result = bs_api.getAppResultById(self.app_result_num)
-            app_ssn = app_result.AppSession 
-            app_ssn.setStatus(bs_api, bs_ssn_status, message)   
+            try:
+                bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
+                app_result = bs_api.getAppResultById(self.app_result_num)
+                app_ssn = app_result.AppSession 
+                app_ssn.setStatus(bs_api, bs_ssn_status, message)   
+            except Exception as e:
+                e.message = "Error updating BaseSpace AppSession status: " + e.message
+                raise
+
 
         
     def _run_picard(self, input_file):    
