@@ -63,7 +63,7 @@ db.define_table('app_data',
     #Field('auth_url', default='https://basespace.illumina.com/oauth/authorize'),
     #Field('token_url', default='https://api.basespace.illumina.com/v1pre3/oauthv2/token/'),
     Field('client_id', default='9aec318fb4f7467fbfe2f88c9a3632aa'),                               # portal hoth
-    Field('client_secret', default='68dae26dd15c4ce8a186f02d83853e73'),                           # portal hoth    
+    Field('client_secret', default='4fee19aca5fd49e98fa60693d9fbb6ae'),                           # portal hoth    
     Field('baseSpaceUrl', default='https://api.cloud-hoth.illumina.com/'),                        # portal hoth
     Field('version', default='v1pre3'),
     Field('auth_url', default='https://cloud-hoth.illumina.com/oauth/authorize'),                 # portal hoth

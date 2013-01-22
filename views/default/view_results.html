@@ -18,7 +18,7 @@
 <!-- set row color based on status -->
 {{cls = 'warning'}}
 {{if i['status'] == 'complete': cls='success'}}
-{{if i['status'] == 'error': cls='error'}}
+{{if i['status'] == 'aborted': cls='error'}}
 
 {{=TR(TD(A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id']} ))), TD(i['project_name']), TD(i['date_created']), TD(i['status']), TD(i['notes']), _class=cls)
 }}

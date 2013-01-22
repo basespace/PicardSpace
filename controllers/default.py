@@ -180,12 +180,12 @@ def choose_analysis_app_result():
     ar_offset = 0
     const_ar_limit = 5
     ar_limit = const_ar_limit
-    if request.get_vars.ar_offset:
-        ar_offset=int(request.get_vars.ar_offset)
-    if request.get_vars.ar_limit:
-        ar_limit=int(request.get_vars.ar_limit)    
+    if request.vars.ar_offset:
+        ar_offset=int(request.vars.ar_offset)
+    if request.vars.ar_limit:
+        ar_limit=int(request.vars.ar_limit)    
 
-    # record offest and limit for 'back' link
+    # record offset and limit for 'back' link
     session.ar_offset = ar_offset
     session.ar_limit = ar_limit
             
@@ -254,8 +254,8 @@ def choose_analysis_file():
     Offers the user choice of file to analyze
     """
     # get app_result_num that user selected    
-    if (request.post_vars['ar_choice']):
-        session.input_app_result_num = request.post_vars['ar_choice']
+    if (request.vars['ar_choice']):
+        session.input_app_result_num = request.vars['ar_choice']
     
     # check that session ar num is set (could've arrived from from back link)
     if (not session.input_app_result_num):    
@@ -297,8 +297,8 @@ def confirm_analysis_inputs():
     Confirms user's choice of file to analyze; offers naming app result and launch button
     """    
     # get file_num and app_result_num that user selected    
-    if (request.post_vars['file_choice']):
-        [session.input_app_result_num, session.file_num] = request.post_vars['file_choice'].split(',')        
+    if (request.vars['file_choice']):
+        [session.input_app_result_num, session.file_num] = request.vars['file_choice'].split(',')        
     else:
         return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
 

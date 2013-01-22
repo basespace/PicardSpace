@@ -23,21 +23,29 @@ while True:
             app_result_name=ar_row.app_result_name,
             app_result_num=ar_row.app_result_num)        
             
-        # run analysis and writeback results to BaseSpace
-        try:
-            fb = app_result.run_analysis_and_writeback(input_file)
-            status = fb.status
-            message = fb.message
-        except Exception as e:
-            print "Error: {0}".format(str(e))
-
-            # update AppResult in db
-            status = 'error'
+        # run analysis and writeback results to BaseSpace                        
+        message = 'None'
+        try:                        
+            app_result.run_analysis_and_writeback(input_file) 
+                                               
+        except Exception as e:                                
             message = str(e)
-            row.update_record(status='error')
-            ssn_row.update_record(status='error', message=str(e))           
+            if e.message:
+                message = message + " - " + e.message
+            
+            # append error message to existing app session status message (to keep context); print it
+            message = app_result.status_message() + "; " + message                    
+            print "Error: {0}".format(message)
+
+            # update AppSession status in db and BaseSpace            
+            try:            
+                app_result.update_status('aborted', message, 'aborted')
+            except Exception as e:
+                # this error message will only print, not in db -- we tried! (user won't see it)
+                print "Error updating AppSession status: {0} - {1}".format(str(e), e.message)                                                                                    
+        
         # update analysis queue with analysis feedback
-        row.update_record(status=status)
+        row.update_record(status='complete')
         row.update_record(message=message)
 
         db.commit()

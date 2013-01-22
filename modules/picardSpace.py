@@ -77,14 +77,6 @@ class AnalysisInputFile(File):
         ssn_row.update_record(status="queued for analysis", message="download complete")
         db.commit()
 
-class AnalysisFeedback:
-    """
-    Records status and error messages of an Analysis
-    """
-    def __init__(self, status, message):               
-        self.status = status
-        self.message = message
-
 
 class AppResult:
     """
@@ -105,46 +97,44 @@ class AppResult:
         Run picard on the provided file and writeback output files to BaseSpace, updating statuses as we go
         """                                    
         # update db and BaseSpace App Session with status
-        self._update_status('running', 'picard is running', 'Running')
+        self.update_status('running', 'picard is running', 'running')
                 
-        # run picard
-        message = 'analysis successful'
-        try:
-            if not (self._run_picard(input_file=input_file)):
-                message = 'analysis Failed'
-        except IOError as e:
-            message = "Error in local file I/O (error number {0}): {1}".format(e.errno, e)
-            self._update_status('analysis Error', message, 'Error')
-        except:        
-            message = "Picard analysis failed -- see stderr.txt file for more information."
-            self._update_status('analysis Error', message, 'Error')
+        # run picard                        
+        if self._run_picard(input_file):
+            message = 'analysis successful'
+            analysis_success = True            
         else:
-            self._update_status("writing back", message)
+            message = 'analysis failed - see stderr.txt'
+            analysis_success = False        
+        self.update_status("writing back", message)
        
-            # writeback output files
-            try:
-                self._writeback_app_result_files()
-            except Exception as e:
-                message += "; Error with writeback: {0}".format(str(e))
-                self._update_status('analysis successful, writeback Error', message, 'Error')
-            else:
-                message += "; write-back successful"
-                self._update_status('deleting local files', message)
+        # writeback output files        
+        self._writeback_app_result_files()        
+        message += "; write-back successful"
+        self.update_status('deleting local files', message)
                 
-                # delete local files                
-                try:
-                    shutil.rmtree(os.path.dirname(input_file.local_path))
-                except Exception as e:
-                    message += "; Error deleting local files: {0}".format(str(e))
-                    self._update_status('analysis successful, writeback successful, Error deleting local files', message, 'Error')
-                else:
-                    message += "; deleted local files"
-                    self._update_status('complete', message, 'Complete')
+        # delete local files                        
+        shutil.rmtree(os.path.dirname(input_file.local_path))        
+        message += "; deleted local files"
+
+        # update session status
+        if analysis_success:
+            status = 'complete'
+        else:
+            status = 'aborted'        
+        self.update_status(status, message, status)
             
-        return AnalysisFeedback(self.status, message)
+            
+    def status_message(self):
+        """
+        Return the current status message of the App Session
+        """
+        db = current.db
+        ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        return ssn_row.message
 
 
-    def _update_status(self, local_status, message, bs_ssn_status=None):
+    def update_status(self, local_status, message, bs_ssn_status=None):
         """
         Update db with provided status and detailed message, and update BaseSpace App Session status if provided
         """
@@ -156,21 +146,18 @@ class AppResult:
         ssn_row.update_record(status=self.status, message=self.message)
         db.commit()
         
-        # optionally update status of AppSession in BaseSpace
+        # optionally update status of AppSession in BaseSpace -- limited to 128 chars
         if bs_ssn_status:
             # get BaseSpace API
             ssn_row = db(db.app_session.id==self.app_session_id).select().first()
             user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
             app = db(db.app_data.id > 0).select().first()
             
-            try:
-                bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
-                app_result = bs_api.getAppResultById(self.app_result_num)
-                app_ssn = app_result.AppSession 
-                app_ssn.setStatus(bs_api, bs_ssn_status, message)   
-            except Exception as e:
-                e.message = "Error updating BaseSpace AppSession status: " + e.message
-                raise
+            # handle exceptions in caller
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
+            app_result = bs_api.getAppResultById(self.app_result_num)
+            app_ssn = app_result.AppSession            
+            app_ssn.setStatus(bs_api, bs_ssn_status, message[:128])                    
 
 
         
@@ -194,8 +181,8 @@ class AppResult:
             "VALIDATION_STRINGENCY=LENIENT",
             "ASSUME_SORTED=true"]
         p = Popen(command, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = p.communicate()
-        
+        stdout, stderr = p.communicate()        
+    
         # add output file to writeback list, if output file has non-zero size
         if (os.path.exists(output_path) and os.path.getsize(output_path)):           
             f = File(app_result_id=self.app_result_id,
@@ -228,7 +215,7 @@ class AppResult:
                 file_name=stderr_name,
                 local_path=stderr_path)                                
             self.output_files.append(f_stderr)
-        
+            
         # return true if picard return code was successful
         # note: not handling returncode=None, which means process may still be running
         if (p.returncode == 0):
@@ -250,7 +237,7 @@ class AppResult:
         app_result = bs_api.getAppResultById(self.app_result_num)
         
         # upload files to BaseSpace
-        for f in self.output_files:
+        for f in self.output_files:        
 
             # currently not using a dir name to write to
             bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
