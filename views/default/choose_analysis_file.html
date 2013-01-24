@@ -1,7 +1,7 @@
 {{navbar_enabled=True}}
 {{extend 'layout.html'}}
 
-<p><small><a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))}}"><i class="icon-arrow-left"></i> Choose AppResult</a></small></p>
+<p><small><a href="{{=ar_back}}"><i class="icon-arrow-left"></i> Choose AppResult</a></small></p>
 
 <div class="page-header">
   <h1>Choose File</h1>
@@ -11,7 +11,7 @@
 
 <! -- check that 1 or more BAM files are present in this AppResult -->
     {{if not file_info:}}
-<p>There are no BAM files in AppResult <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))}}">'{{=app_result_name}}'</a>.</p>
+<p>There are no BAM files in AppResult <a href="{{=ar_back}}">'{{=app_result_name}}'</a>.</p>
     {{else:}}
 
 <form enctype="multipart/form-data" 

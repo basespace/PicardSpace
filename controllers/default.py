@@ -22,9 +22,7 @@ def clear_session_vars():
     session.app_result_name = None
     session.file_num = None
     session.file_name = None
-    session.input_app_result_num = None
-    session.ar_offset = None
-    session.ar_limit = None
+    session.input_app_result_num = None    
     session.return_url = None              # TODO rename to nonlogin_return_url 
     session.in_login = False  
     session.token = None
@@ -137,16 +135,12 @@ def index():
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
         redirect(URL('view_results'))       
-
-    #session.return_url = 'user_now_logged_in' 
-           
+        
     # construct login_url for login link, e.g.:
     # http://localhost:8000/PicardSpace/default/user/login?_next=/PicardSpace/default/user_now_logged_in'
-    if (request.is_local):
-        #login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True, port=8000)
-        login_url = URL('user', args=['login'], scheme=True, host=True, port=8000)
+    if (request.is_local):        
+        login_url = URL('user', args=['login'], scheme=True, host=True, port=8000)  # vars=dict(_next=URL('user_now_logged_in')), 
     else:
-        #login_url = URL('user', args=['login'], vars=dict(_next=URL('user_now_logged_in')), scheme=True, host=True)
         login_url = URL('user', args=['login'], scheme=True, host=True)
 
                                     
@@ -172,7 +166,8 @@ def user_now_logged_in():
             user_row.update_record(access_token=session.token)
             session.token = None
         
-        redirect(URL('choose_analysis_app_result'))
+        #redirect(URL('choose_analysis_app_result'))
+        redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
 
 
 @auth.requires_login()
@@ -188,9 +183,8 @@ def choose_analysis_app_result():
     if request.vars.ar_limit:
         ar_limit=int(request.vars.ar_limit)    
 
-    # record offset and limit for 'back' link
-    session.ar_offset = ar_offset
-    session.ar_limit = ar_limit
+    # record offset and limit for 'back' link    
+    ar_back = URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))    
             
     # get project context that user launched from BaseSpace
     app_session_num = session.app_session_num
@@ -203,7 +197,7 @@ def choose_analysis_app_result():
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(session.project_num)
     except Exception as e:
-        return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", err_msg=str(e))        
+        return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, err_msg=str(e))        
     project_name = proj.Name    
 
     # get App Results for current Project, limited by limit and offset for performance
@@ -236,7 +230,7 @@ def choose_analysis_app_result():
             ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
                               "app_result_num" : ar.Id } )                                                  
     except Exception as e:
-        return dict(project_name=project_name, ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", err_msg=str(e))                                                                                                                                                                                 
+        return dict(project_name=project_name, ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, err_msg=str(e))                                                                                                                                                                                 
     
     # calculate next and prev start/end                                                                                                                                        
     next_offset = ar_end
@@ -248,7 +242,7 @@ def choose_analysis_app_result():
     if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
         prev_offset = 0
                                                                                                                                                                                                                 
-    return dict(project_name=project_name, ar_info=ar_info, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, err_msg="")
+    return dict(project_name=project_name, ar_info=ar_info, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, err_msg="")
 
 
 @auth.requires_login()
@@ -260,9 +254,16 @@ def choose_analysis_file():
     if (request.vars['ar_choice']):
         session.input_app_result_num = request.vars['ar_choice']
     
+    # get 'back' url of choose app result page
+    if (request.vars['ar_back']):
+        ar_back=request.vars['ar_back']
+    else:
+        ar_back=URL('choose_analysis_app_result')
+    
+    
     # check that session ar num is set (could've arrived from from back link)
     if (not session.input_app_result_num):    
-        return dict(app_result_name="", file_info="", ar_limit="", ar_offset="", err_msg="We have a problem - expected AppResult info but didn't receive it")                  
+        return dict(app_result_name="", file_info="", ar_back=ar_back, err_msg="We have a problem - expected AppResult info but didn't receive it")                  
             
     # get list of BAM files for this AppResult from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -291,7 +292,7 @@ def choose_analysis_file():
     
     app_result_name=app_result.Name + " - " + ', '.join(samples_names)
     
-    return dict(app_result_name=app_result_name, file_info=file_info, ar_limit=session.ar_limit, ar_offset=session.ar_offset, err_msg="")
+    return dict(app_result_name=app_result_name, file_info=file_info, ar_back=ar_back, err_msg="")
 
 
 @auth.requires_login()
