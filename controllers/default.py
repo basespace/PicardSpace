@@ -349,7 +349,7 @@ def confirm_analysis_inputs():
         app_result = bs_api.getAppResultById(session.input_app_result_num)
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
-        return dict(sample_name="", file_name="", project_name="", err_msg=str(e))        
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", err_msg=str(e))        
 
     # get input file name
     session.file_name = input_file.Name
@@ -363,8 +363,13 @@ def confirm_analysis_inputs():
         except Exception as e:
             return dict(sample_name="", file_name="", project_name="", err_msg=str(e))               
         sample_name = sample.Name               
+
+    # add writeback message if writing to PicardSpace Results project
+    writeback_msg = ""
+    if project.Name == 'PicardSpace Results':
+        writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
     
-    return dict(sample_name=T(str(sample_name)), file_name=T(str(input_file.Name)), project_name=T(str(project.Name)), err_msg="")        
+    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=str(project.Name), writeback_msg=writeback_msg, err_msg="")        
 
 
 @auth.requires_login()
