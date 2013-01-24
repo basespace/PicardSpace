@@ -26,7 +26,7 @@ while True:
 
             # update download queue and AppSession status in db
             row.update_record(status='error')
-            ssn_row.update_record(status='error', message=str(e))
+            ssn_row.update_record(status='aborted', message=str(e))
         else:
             row.update_record(status='complete')
         db.commit()

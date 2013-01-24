@@ -17,12 +17,12 @@ auth = Auth(db)
 
 auth_table = db.define_table(
            auth.settings.table_user_name,
-           Field('first_name', length=128, default=""), # 'first_name' needed for name display in UI
-           Field('email', length=128, default=""),
-           Field('username', length=128, default=""),   # reqd by web2py
+           Field('first_name', length=128, default=""),                                             # needed for name display in UI - contains BaseSpace full user name
+           Field('email', length=128, default=""),                                                  # contains BaseSpace user email
+           Field('username', length=128, default=""),                                               # reqd by web2py - contains BaseSpace user id (use this field instead of registration id)
            Field('access_token', length=128, default=""),
-           Field('registration_key', length=512, default= "", writable=False, readable=False),
-           Field('registration_id', length=512, default= "", writable=False, readable=False)) # needed by web2py
+           Field('registration_key', length=512, default= "", writable=False, readable=False),      # not currently used
+           Field('registration_id', length=512, default= "", writable=False, readable=False))       # used by web2py - also contains BaseSpace user id (use 'username' instead of registration id)
 
 auth_table.username.requires = IS_NOT_IN_DB(db, auth_table.username)
 

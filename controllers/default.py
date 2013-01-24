@@ -17,7 +17,7 @@ def clear_session_vars():
     """
     session.app_session_num = None
     session.project_num = None
-    session.scope = None                   # scope for OAuth2, non-login; TODO rename to nonlogin_scope
+    #session.scope = None                   # scope for OAuth2, non-login; TODO rename to nonlogin_scope
     session.login_scope = None             # scope for OAuth2 during login
     session.app_result_name = None
     session.file_num = None
@@ -65,6 +65,9 @@ def handle_redirect_uri():
             ref_content = ssn_ref.Content
             session.project_num = ref_content.Id
             session.login_scope = ref_content.getAccessStr(scope='read')
+            
+            # add ability to create project for writeback if needed
+            session.login_scope += ', create projects'                                
             
             # create app_session in db
             app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
@@ -289,27 +292,56 @@ def choose_analysis_file():
     app_result_name=app_result.Name + " - " + ', '.join(samples_names)
     
     return dict(app_result_name=app_result_name, file_info=file_info, ar_limit=session.ar_limit, ar_offset=session.ar_offset, err_msg="")
-    
+
 
 @auth.requires_login()
-def confirm_analysis_inputs():
+def choose_writeback_project():
     """
-    Confirms user's choice of file to analyze; offers naming app result and launch button
-    """    
+    Checks that user owns Project that contains input file; if not, write to 'PicardSpace Result' Project, which will be created if it doesn't already exist.
+    """
     # get file_num and app_result_num that user selected    
     if (request.vars['file_choice']):
         [session.input_app_result_num, session.file_num] = request.vars['file_choice'].split(',')        
     else:
         return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
 
-    # TODO check that project is writeable
+    # check that user owns the launch-project 
+    user_row = db(db.auth_user.id==auth.user_id).select().first()
+    app = db(db.app_data.id > 0).select().first()       
+    try:
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
+        project = bs_api.getProjectById(session.project_num)
+    except Exception as e:
+        return dict(err_msg=str(e))
     
+    if user_row.username == project.UserOwnedBy.Id:
+        # user is owner - assume they want to write back to source project
+        redirect(URL('confirm_analysis_inputs'))        
+    else:
+        # the user doesn't own the Project they launched with - create 'PicardSpace Results' Project or use it if it already exists  
+        try:
+            ps_proj = bs_api.createProject('PicardSpace Results')    
+        except Exception as e:
+            return dict(err_msg=str(e))
     
+        # set writeback project to PicardSpace Results project
+        session.project_num = ps_proj.Id
+    
+        # get read access to the project since 'create project' doesn't give this        
+        session.return_url = 'confirm_analysis_inputs'
+        redirect(URL('get_auth_code'))    
+
+
+@auth.requires_login()
+def confirm_analysis_inputs():
+    """
+    Confirms user's choice of file to analyze; offers naming app result and launch button
+    """        
     # get name of file and project and referenced sample from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
         project = bs_api.getProjectById(session.project_num)
         input_file = bs_api.getFileById(session.file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
@@ -330,11 +362,7 @@ def confirm_analysis_inputs():
             sample = bs_api.getSampleById(session.sample_num)
         except Exception as e:
             return dict(sample_name="", file_name="", project_name="", err_msg=str(e))               
-        sample_name = sample.Name           
-
-    # set scope for getting access token and url to redirect to afterwards
-    session.return_url = 'start_analysis'
-    session.scope = 'write'
+        sample_name = sample.Name               
     
     return dict(sample_name=T(str(sample_name)), file_name=T(str(input_file.Name)), project_name=T(str(project.Name)), err_msg="")        
 
@@ -342,63 +370,14 @@ def confirm_analysis_inputs():
 @auth.requires_login()
 def get_auth_code():
     """
-    Given an app session number, exchange this via BaseSpace API for item names to analyze
-    """                    
-    # record post var 'appresult_name', if present, in session var
-    if (request.post_vars.app_result_name):
-        session.app_result_name = request.post_vars.app_result_name
+    Begin Oauth process to get write access to writeback project
+    """                        
+    scope = 'write project ' + str(session.project_num)    
     
-    scope = session.scope + ' project ' + str(session.project_num)    
-
-    # get auth code
     try:
         get_auth_code_util(scope)
     except Exception as e:
         return dict(err_msg=str(e))    
-
-
-#@auth.requires_login()
-#def get_access_token():
-#    """
-#    Given an authorization code, exchange this for an access token
-#    """
-    # handle api errors
-#    if (request.get_vars.error):
-#        message = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_message)
-#        return dict(message=T(message))                    
-    
-    # exchange authorization code for auth token            
-#    try:
-#        access_token = get_access_token_util(request.get_vars.code)
-#    except Exception as e:
-#        return dict(err_msg=str(e))
-                            
-    #auth_code = request.get_vars.code
-    #app_session_num = session.app_session_num
-    #app = db(db.app_data.id > 0).select().first()
-    #try:
-    #    bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,app_session_num)
-    #    bs_api.updatePrivileges(auth_code)      
-    #    access_token =  bs_api.getAccessToken()      
-    #except Exception as e:
-    #    return dict(err_msg=str(e))
-
-    # ensure the current app user is the same as the current BaseSpace user        
-#    user_row = db(db.auth_user.id==auth.user_id).select().first()
-#    cur_user_id = user_row.username
-#    try:
-#        bs_user = bs_api.getUserById('current')
-#    except Exception as e:
-#        return dict(err_msg=str(e))
-
-#    if (bs_user.Id != cur_user_id):
-#        return dict(err_msg="Error - mismatch between PicardSpace user id of " + str(cur_user_id) + " and current BaseSpace user id of " + str(bs_user.Id) + ". Please re-login to PicardSpace.")
-   
-    # update user's access token in user table
-#    user_row.update_record(access_token=access_token)
-
-    # go to url specified by original call to get token
-#    redirect(URL(session.return_url))
     
 
 @auth.requires_login()
@@ -406,6 +385,10 @@ def start_analysis():
     """
     Create an app result in BaseSpace and the local db, then queue the input BAM file for download from BaseSpace
     """
+    # record post var 'appresult_name', if present, in session var
+    if (request.post_vars.app_result_name):
+        session.app_result_name = request.post_vars.app_result_name
+        
     # get session id and current user id from db
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
