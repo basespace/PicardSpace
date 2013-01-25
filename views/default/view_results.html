@@ -20,8 +20,25 @@
 {{if i['status'] == 'complete': cls='success'}}
 {{if i['status'] == 'aborted': cls='error'}}
 
-{{=TR(TD(A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id']} ))), TD(i['project_name']), TD(i['date_created']), TD(i['status']), TD(i['notes']), _class=cls)
+{{=TR(TD(A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id'], 'ar_back': ar_back} ))), TD(i['project_name']), TD(i['date_created']), TD(i['status']), TD(i['notes']), _class=cls)
 }}
 
 {{pass}}
 </table>
+
+        <!-- pass back url of this page -->
+        <input type="hidden" name="ar_back" value="{{=ar_back}}">
+        
+        <!-- horizontal divider -->
+        <ul class = "nav nav-list">
+            <li class="divider"></li>
+        </ul>        
+        <p>
+            {{if ar_start > 1:}}
+            <a href="{{=URL('view_results', vars=dict(ar_offset=prev_offset, ar_limit=prev_limit))}}"><i class="icon-arrow-left"></i></a> 
+            {{pass}}
+            {{=ar_start}} - {{=ar_end}} of {{=ar_tot}} 
+            {{if ar_end < ar_tot:}}
+            <a href="{{=URL('view_results', vars=dict(ar_offset=next_offset, ar_limit=next_limit))}}"><i class="icon-arrow-right"></i></a>
+            {{pass}}        
+        </p>    

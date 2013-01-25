@@ -187,8 +187,8 @@ def choose_analysis_app_result():
     ar_back = URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))    
             
     # get project context that user launched from BaseSpace
-    app_session_num = session.app_session_num
-    project_num = session.project_num
+    #app_session_num = session.app_session_num
+    #project_num = session.project_num
 
     # get name of project from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -459,6 +459,20 @@ def view_results():
     message = ""
     if request.get_vars.message:
         message = request.get_vars.message    
+
+        
+    # handle pagination vars
+    ar_offset = 0
+    const_ar_limit = 5
+    ar_limit = const_ar_limit
+    if request.vars.ar_offset:
+        ar_offset=int(request.vars.ar_offset)
+    if request.vars.ar_limit:
+        ar_limit=int(request.vars.ar_limit)    
+
+    # record offset and limit for 'back' link    
+    ar_back = URL('view_results', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))            
+
     
     # get BaseSpace API
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -466,24 +480,58 @@ def view_results():
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
     except Exception as e:
-        return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))
+        #return dict(message=message, app_ssns=app_ssns, err_msg=str(e))
+        return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg="")
+
     
-    # get all app sessions for the current user    
-    ssn_rows = db(db.app_session.user_id==auth.user_id).select(orderby=~db.app_session.date_created)
+    # TODO re-add sort by date created -- just reverse rows?
+    # get app sessions for the current user, sorted by date created
+    #ssn_rows = db(db.app_session.user_id==auth.user_id).select(orderby=~db.app_session.date_created)
+    ssn_rows = db(db.app_session.user_id==auth.user_id).select(limitby=(ar_offset, ar_offset+ar_limit), orderby=~db.app_session.date_created)
+
+    # get total number of app sessions
+    ar_tot = db(db.app_session.user_id==auth.user_id).count()        
+    #ar_tot = len(app_results)
+    
+    # don't allow indexing off end of app_results list
+    ar_end = ar_offset+ar_limit        
+    if ar_end > ar_tot:
+        ar_end = ar_tot                                                    
+    #for n in range(ar_offset,ar_end):        
+    #    ar_short = app_results[n]
+
+    
     for ssn_row in ssn_rows:
-        rslt_rows = db(db.output_app_result.app_session_id==ssn_row.id).select()
+        # should be only one app result per app session
+        rslt_row = db(db.output_app_result.app_session_id==ssn_row.id).select().first()
 
         # get project name for each AppResult    
-        for rslt_row in rslt_rows:          
+        #for rslt_row in rslt_rows:          
+        if rslt_row:
             try:
                 proj = bs_api.getProjectById(rslt_row.project_num)
             except Exception as e:
                 return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                                  
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
-            #    'sample_name':sample_name, 'file_name':input_file.Name,                 
+            #    'sample_name':sample_name, 'file_name':input_file.Name,
+        else:                 
+            app_ssns.append( { 'app_result_name':'none', 'project_name':'none', 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
+            
+    
+    # calculate next and prev start/end                                                                                                                                        
+    next_offset = ar_end
+    next_limit = const_ar_limit    
+    prev_offset = ar_offset - const_ar_limit
+    prev_limit = const_ar_limit                                                                    
+    if next_offset > ar_tot:
+        next_offset = ar_tot    
+    if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        prev_offset = 0
         
-    return dict(message=T(message), app_ssns=app_ssns, err_msg=T(err_msg))
+        
+    #return dict(message=message, app_ssns=app_ssns, err_msg=err_msg)
+    return dict(message=message, app_ssns=app_ssns, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, err_msg="")
 
     
 @auth.requires_login()
@@ -492,6 +540,12 @@ def view_alignment_metrics():
     Display picard's output from CollectAlignmentMetrics
     """
     app_session_id = request.get_vars.app_session_id
+    
+    # get 'back' url of view results page
+    if (request.vars['ar_back']):
+        ar_back=request.vars['ar_back']
+    else:
+        ar_back=URL('view_results')
     
     # set var defaults
     hdr = ""
@@ -522,8 +576,9 @@ def view_alignment_metrics():
             input_project_name="", 
             input_app_result_name="", 
             output_app_result_name="", 
-            output_project_name="", 
-            err_msg=T(str(e))))
+            output_project_name="",
+            ar_back=ar_back, 
+            err_msg=str(e)))
 
     # get output file info from db    
     f_rows = db(db.output_file.app_result_id==output_ar_row.id).select()
@@ -555,8 +610,9 @@ def view_alignment_metrics():
                 input_project_name=input_project.Name, 
                 input_app_result_name=input_ar_row.app_result_name,  
                 output_app_result_name=output_ar_row.app_result_name, 
-                output_project_name=output_project.Name, 
-                err_msg=T(str(e))))
+                output_project_name=output_project.Name,
+                ar_back=ar_back, 
+                err_msg=str(e)))
         
         # read local file into array (for display in view)
         with open( local_path, "r") as ALN_QC:
@@ -587,8 +643,9 @@ def view_alignment_metrics():
                 input_project_name=input_project.Name, 
                 input_app_result_name=input_ar_row.app_result_name,  
                 output_app_result_name=output_ar_row.app_result_name, 
-                output_project_name=output_project.Name, 
-                err_msg=T(str(e))))
+                output_project_name=output_project.Name,
+                ar_back=ar_back, 
+                err_msg=str(e)))
 
     # TODO check that user is correct (could jump to this page as another user)
     return(dict(aln_tbl=tps_aln_tbl, 
@@ -599,7 +656,8 @@ def view_alignment_metrics():
         input_project_name=input_project.Name,        
         input_app_result_name=input_ar_row.app_result_name,  
         output_app_result_name=output_ar_row.app_result_name, 
-        output_project_name=output_project.Name, 
+        output_project_name=output_project.Name,
+        ar_back=ar_back, 
         err_msg=""))
                 
 
