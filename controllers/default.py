@@ -16,7 +16,7 @@ def clear_session_vars():
     Clear all session variables
     """
     session.app_session_num = None
-    session.project_num = None
+    session.writeback_project_num = None
     #session.scope = None                   # scope for OAuth2, non-login; TODO rename to nonlogin_scope
     session.login_scope = None             # scope for OAuth2 during login
     session.app_result_name = None
@@ -61,7 +61,7 @@ def handle_redirect_uri():
             return dict(err_msg="Error - unrecognized reference type " + ssn_ref.Type + ". ")
         else:            
             ref_content = ssn_ref.Content
-            session.project_num = ref_content.Id
+            project_num = ref_content.Id
             session.login_scope = ref_content.getAccessStr(scope='read')
             
             # add ability to create project for writeback if needed
@@ -69,9 +69,10 @@ def handle_redirect_uri():
             
             # create app_session in db
             app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
-                project_num=session.project_num,
+                project_num=project_num,
                 date_created=app_ssn.DateCreated,
-                status="newly created")
+                status="newly created",
+                message="newly launched App Session - no analysis performed yet")
             
             # log user into PicardSpace (user should already be logged into BaseSpace)
             # TODO change to be an actual url, as the name suggests, not just a controller name?
@@ -184,18 +185,15 @@ def choose_analysis_app_result():
         ar_limit=int(request.vars.ar_limit)    
 
     # record offset and limit for 'back' link    
-    ar_back = URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))    
-            
-    # get project context that user launched from BaseSpace
-    #app_session_num = session.app_session_num
-    #project_num = session.project_num
+    ar_back = URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))                    
 
     # get name of project from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
-        proj = bs_api.getProjectById(session.project_num)
+        proj = bs_api.getProjectById(ssn_row.project_num)
     except Exception as e:
         return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, err_msg=str(e))        
     project_name = proj.Name    
@@ -308,16 +306,19 @@ def choose_writeback_project():
 
     # check that user owns the launch-project 
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     app = db(db.app_data.id > 0).select().first()       
     try:
         bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
-        project = bs_api.getProjectById(session.project_num)
+        launch_project = bs_api.getProjectById(ssn_row.project_num)
     except Exception as e:
         return dict(err_msg=str(e))
     
-    if user_row.username == project.UserOwnedBy.Id:
+    if user_row.username == launch_project.UserOwnedBy.Id:
         # user is owner - assume they want to write back to source project
-        redirect(URL('confirm_analysis_inputs'))        
+        session.writeback_project_num = ssn_row.project_num
+        session.return_url = 'confirm_analysis_inputs'
+        redirect(URL('get_auth_code'))                
     else:
         # the user doesn't own the Project they launched with - create 'PicardSpace Results' Project or use it if it already exists  
         try:
@@ -326,7 +327,7 @@ def choose_writeback_project():
             return dict(err_msg=str(e))
     
         # set writeback project to PicardSpace Results project
-        session.project_num = ps_proj.Id
+        session.writeback_project_num = ps_proj.Id
     
         # get read access to the project since 'create project' doesn't give this        
         session.return_url = 'confirm_analysis_inputs'
@@ -343,7 +344,7 @@ def confirm_analysis_inputs():
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
-        project = bs_api.getProjectById(session.project_num)
+        project = bs_api.getProjectById(session.writeback_project_num)
         input_file = bs_api.getFileById(session.file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
 
@@ -378,7 +379,7 @@ def get_auth_code():
     """
     Begin Oauth process to get write access to writeback project
     """                        
-    scope = 'write project ' + str(session.project_num)    
+    scope = 'write project ' + str(session.writeback_project_num)    
     
     try:
         get_auth_code_util(scope)
@@ -399,20 +400,20 @@ def start_analysis():
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()
                  
-    # add new AppResult to BaseSpace - using same Project that contains input file
+    # add new AppResult to BaseSpace
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
-        project = bs_api.getProjectById(session.project_num)
+        wb_proj = bs_api.getProjectById(session.writeback_project_num)
         input_app_result = bs_api.getAppResultById(session.input_app_result_num)
         sample = bs_api.getSampleById(session.sample_num)
-        output_app_result = project.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+        output_app_result = wb_proj.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
     
-    # add input app_result to db
+    # add input AppResult to db
     input_app_result_id = db.input_app_result.insert(
-        project_num=session.project_num,
+        project_num=app_ssn_row.project_num,
         app_result_name=input_app_result.Name,
         app_result_num=session.input_app_result_num,
         sample_num=session.sample_num)
@@ -428,7 +429,7 @@ def start_analysis():
     # add new output AppResult to db            
     output_app_result_id = db.output_app_result.insert(
         app_session_id=app_ssn_row.id,
-        project_num=session.project_num,
+        project_num=session.writeback_project_num,
         app_result_name=session.app_result_name,
         app_result_num=output_app_result.Id,
         sample_num=session.sample_num,        
@@ -455,11 +456,9 @@ def view_results():
     """        
     # if arriving from just-launched analysis, display msg 'just launched'
     app_ssns = []
-    err_msg = ""
     message = ""
     if request.get_vars.message:
         message = request.get_vars.message    
-
         
     # handle pagination vars
     ar_offset = 0
@@ -472,7 +471,6 @@ def view_results():
 
     # record offset and limit for 'back' link    
     ar_back = URL('view_results', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))            
-
     
     # get BaseSpace API
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -480,33 +478,25 @@ def view_results():
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
     except Exception as e:
-        #return dict(message=message, app_ssns=app_ssns, err_msg=str(e))
         return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg="")
-
     
     # TODO re-add sort by date created -- just reverse rows?
-    # get app sessions for the current user, sorted by date created
-    #ssn_rows = db(db.app_session.user_id==auth.user_id).select(orderby=~db.app_session.date_created)
+    # get app sessions for the current user, sorted by date created, limited to offset and limit    
     ssn_rows = db(db.app_session.user_id==auth.user_id).select(limitby=(ar_offset, ar_offset+ar_limit), orderby=~db.app_session.date_created)
 
     # get total number of app sessions
-    ar_tot = db(db.app_session.user_id==auth.user_id).count()        
-    #ar_tot = len(app_results)
+    ar_tot = db(db.app_session.user_id==auth.user_id).count()            
     
     # don't allow indexing off end of app_results list
     ar_end = ar_offset+ar_limit        
     if ar_end > ar_tot:
         ar_end = ar_tot                                                    
-    #for n in range(ar_offset,ar_end):        
-    #    ar_short = app_results[n]
-
     
     for ssn_row in ssn_rows:
         # should be only one app result per app session
         rslt_row = db(db.output_app_result.app_session_id==ssn_row.id).select().first()
 
         # get project name for each AppResult    
-        #for rslt_row in rslt_rows:          
         if rslt_row:
             try:
                 proj = bs_api.getProjectById(rslt_row.project_num)
@@ -514,11 +504,9 @@ def view_results():
                 return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                                  
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
-            #    'sample_name':sample_name, 'file_name':input_file.Name,
         else:                 
             app_ssns.append( { 'app_result_name':'none', 'project_name':'none', 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
-            
-    
+                
     # calculate next and prev start/end                                                                                                                                        
     next_offset = ar_end
     next_limit = const_ar_limit    
@@ -528,9 +516,7 @@ def view_results():
         next_offset = ar_tot    
     if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
         prev_offset = 0
-        
-        
-    #return dict(message=message, app_ssns=app_ssns, err_msg=err_msg)
+                
     return dict(message=message, app_ssns=app_ssns, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, err_msg="")
 
     

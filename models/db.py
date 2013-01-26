@@ -224,7 +224,7 @@ auth.settings.login_form=BaseSpaceAccount()
 # define db tables
 db.define_table('app_session',
     Field('app_session_num'),
-    Field('project_num'),               # the BaseSpace project to write-back results
+    Field('project_num'),               # the BaseSpace project that the app was launched with (redundant with input_app_result project)
     Field('user_id'), db.auth_user,
     Field('date_created'),
     Field('status'),                    
