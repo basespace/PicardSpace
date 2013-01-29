@@ -15,20 +15,48 @@
     {{else:}}
 
 <form enctype="multipart/form-data" 
-    action="{{=URL('choose_writeback_project')}}" method="post">
+    action="{{=URL('confirm_analysis_inputs')}}" method="get">
         <legend>Please select a BAM file from AppResult '{{=app_result_name}}':</legend>
                     
     <! -- pre-check first radio button -->    
     {{ first = 0 }}
     {{for file in file_info:}}
         <label class="radio">
-            <input type="radio" name="file_choice" id="{{=file['file_name']}}" value="{{=file['app_result_num']}},{{=file['file_num']}}" {{ if first == 0:}}checked{{pass}}>
+            <input type="radio" name="file_num" id="{{=file['file_name']}}" class="{{=file['large_file']}}" value="{{=file['file_num']}}" {{ if first == 0:}}checked{{pass}}>
             {{=file['file_name']}}
             {{ first+=1 }}
         </label>
     {{pass}}
+    <input type="hidden" name="ar_num" value="{{=ar_num}}">
     <br/>
     <button type="submit" class="btn btn-primary">Next...</button>
 </form>
 
 {{pass}}
+
+<!-- large file modal window -->
+<div id="large_file_modal" class="modal hide fade">
+  <div class="modal-header">
+    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+    <h3>That's a big file you have there.</h3>
+  </div>
+  <div class="modal-body">
+    <p>Please choose files that are less than 100 MB.</p>
+  </div>
+  <!-- <div class="modal-footer">
+    <a href="#" class="btn">OK</a>    
+  </div>
+  -->
+</div>
+
+
+<!-- display large file modal window for large files -->
+<script>
+$("form").submit(function() {
+    if ($("input:checked").hasClass("large_file")) {
+        $('#large_file_modal').modal('show');
+        return false;
+    }           
+    return true;    
+});
+</script>

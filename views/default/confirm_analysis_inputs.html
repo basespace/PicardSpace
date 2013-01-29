@@ -8,7 +8,7 @@
   <p class="text-error lead">{{=err_msg}}</p>
   
   <form enctype="multipart/form-data"
-      action="{{=URL('start_analysis')}}" method="post">
+      action="{{=URL('create_writeback_project')}}" method="post">
     <legend>Would you like to analyze this Sample?</legend>
     <label>Sample: {{=sample_name}}</label>
     <label>File: {{=file_name}}</label>
@@ -18,7 +18,11 @@
       {{pass}}
     </label>        
     <label>New AppResult name:</label>
-    <input type="text" name="app_result_name" value="Picard Aln Metrics for {{=sample_name}}" />
+    <input type="text" name="ar_name" value="Picard Aln Metrics for {{=sample_name}}" />
+
+    <input type="hidden" name="ar_num" value="{{=ar_num}}">
+    <input type="hidden" name="file_num" value="{{=file_num}}">
+    
     <br/>
     <button type="submit" class="btn btn-primary btn-large">Launch Analysis</button>
   </form>

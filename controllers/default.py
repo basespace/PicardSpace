@@ -15,14 +15,9 @@ def clear_session_vars():
     """
     Clear all session variables
     """
-    session.app_session_num = None
-    session.writeback_project_num = None
-    #session.scope = None                   # scope for OAuth2, non-login; TODO rename to nonlogin_scope
-    session.login_scope = None             # scope for OAuth2 during login
-    session.app_result_name = None
-    session.file_num = None
+    session.app_session_num = None    
+    session.login_scope = None             # scope for OAuth2 during login    
     session.file_name = None
-    session.input_app_result_num = None    
     session.return_url = None              # TODO rename to nonlogin_return_url 
     session.in_login = False  
     session.token = None
@@ -74,9 +69,8 @@ def handle_redirect_uri():
                 status="newly created",
                 message="newly launched App Session - no analysis performed yet")
             
-            # log user into PicardSpace (user should already be logged into BaseSpace)
-            # TODO change to be an actual url, as the name suggests, not just a controller name?
-            session.return_url = 'user_now_logged_in'            
+            # log user into PicardSpace (user should already be logged into BaseSpace)            
+            session.return_url = URL('user_now_logged_in')            
             redirect( URL('user', args=['login']) )
                                                                                                                                                                                                                                                                                                                                                                                               
 
@@ -112,7 +106,7 @@ def handle_redirect_uri():
         db.commit()
             
         # go to url specified by original call to get token
-        redirect(URL(session.return_url))            
+        redirect(session.return_url)            
 
     # shouldn't reach this point - redirect to index page
     redirect(URL('index'))     
@@ -195,7 +189,7 @@ def choose_analysis_app_result():
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(ssn_row.project_num)
     except Exception as e:
-        return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, err_msg=str(e))        
+        return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg=str(e))        
     project_name = proj.Name    
 
     # get App Results for current Project, limited by limit and offset for performance
@@ -228,7 +222,7 @@ def choose_analysis_app_result():
             ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
                               "app_result_num" : ar.Id } )                                                  
     except Exception as e:
-        return dict(project_name=project_name, ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, err_msg=str(e))                                                                                                                                                                                 
+        return dict(project_name=project_name, ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg=str(e))                                                                                                                                                                                 
     
     # calculate next and prev start/end                                                                                                                                        
     next_offset = ar_end
@@ -240,7 +234,7 @@ def choose_analysis_app_result():
     if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
         prev_offset = 0
                                                                                                                                                                                                                 
-    return dict(project_name=project_name, ar_info=ar_info, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, err_msg="")
+    return dict(project_name=project_name, ar_info=ar_info, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg="")
 
 
 @auth.requires_login()
@@ -248,30 +242,31 @@ def choose_analysis_file():
     """
     Offers the user choice of file to analyze
     """
-    # get app_result_num that user selected    
-    if (request.vars['ar_choice']):
-        session.input_app_result_num = request.vars['ar_choice']
-    
-    # get 'back' url of choose app result page
+    # require app result selection
+    if ('ar_num' not in request.vars):
+        redirect(URL('choose_analysis_app_result'))            
+    #session.input_app_result_num = request.vars['ar_num']
+    ar_num = request.vars['ar_num']                      
+                
+    # get 'back' url of choose app result page                            
     if (request.vars['ar_back']):
-        ar_back=request.vars['ar_back']
+        ar_back = request.vars['ar_back']
     else:
-        ar_back=URL('choose_analysis_app_result')
-    
-    
+        ar_back = URL('choose_analysis_app_result')
+        
     # check that session ar num is set (could've arrived from from back link)
-    if (not session.input_app_result_num):    
-        return dict(app_result_name="", file_info="", ar_back=ar_back, err_msg="We have a problem - expected AppResult info but didn't receive it")                  
+    #if (not session.input_app_result_num):    
+    #    return dict(app_result_name="", file_info="", ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg="We have a problem - expected AppResult info but didn't receive it")                  
             
     # get list of BAM files for this AppResult from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)
-        app_result = bs_api.getAppResultById(session.input_app_result_num)
+        app_result = bs_api.getAppResultById(ar_num)
         bs_files = app_result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
     except Exception as e:
-        return dict(app_result_name="", file_info="", ar_limit="", ar_offset="", err_msg=str(e))     
+        return dict(app_result_name="", file_info="", ar_back=ar_back, ar_num=ar_num, err_msg=str(e))     
     
     # get Sample name from relationship to AppResult for display
     samples = app_result.getReferencedSamples(bs_api)
@@ -283,75 +278,53 @@ def choose_analysis_file():
                 
     # construct display name for each BAM file   
     file_info = []    
-    for f in bs_files:           
+    for f in bs_files:      
+        
+        # don't allow analysis of files > 100 MB
+        large_file = ""
+        if (f.Size > 100000000):     
+            large_file = "large_file"
+            
         file_info.append( { "file_name" : f.Name + " (" + readable_bytes(f.Size) + ")",
                             "file_num" : f.Id,
-                            "app_result_num" : app_result.Id } )                      
+                            #"app_result_num" : app_result.Id,
+                            "large_file" : large_file } )                      
     
     app_result_name=app_result.Name + " - " + ', '.join(samples_names)
     
-    return dict(app_result_name=app_result_name, file_info=file_info, ar_back=ar_back, err_msg="")
+    return dict(app_result_name=app_result_name, file_info=file_info, ar_back=ar_back, ar_num=ar_num, err_msg="")
 
 
 @auth.requires_login()
-def choose_writeback_project():
-    """
-    Checks that user owns Project that contains input file; if not, write to 'PicardSpace Result' Project, which will be created if it doesn't already exist.
-    """
-    # get file_num and app_result_num that user selected    
-    if (request.vars['file_choice']):
-        [session.input_app_result_num, session.file_num] = request.vars['file_choice'].split(',')        
-    else:
-        return dict(sample_name="", file_name="", project_name="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")                  
-
-    # check that user owns the launch-project 
-    user_row = db(db.auth_user.id==auth.user_id).select().first()
-    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
-    app = db(db.app_data.id > 0).select().first()       
-    try:
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
-        launch_project = bs_api.getProjectById(ssn_row.project_num)
-    except Exception as e:
-        return dict(err_msg=str(e))
-    
-    if user_row.username == launch_project.UserOwnedBy.Id:
-        # user is owner - assume they want to write back to source project
-        session.writeback_project_num = ssn_row.project_num
-        session.return_url = 'confirm_analysis_inputs'
-        redirect(URL('get_auth_code'))                
-    else:
-        # the user doesn't own the Project they launched with - create 'PicardSpace Results' Project or use it if it already exists  
-        try:
-            ps_proj = bs_api.createProject('PicardSpace Results')    
-        except Exception as e:
-            return dict(err_msg=str(e))
-    
-        # set writeback project to PicardSpace Results project
-        session.writeback_project_num = ps_proj.Id
-    
-        # get read access to the project since 'create project' doesn't give this        
-        session.return_url = 'confirm_analysis_inputs'
-        redirect(URL('get_auth_code'))    
-
-
-@auth.requires_login()
+#def choose_writeback_project():
 def confirm_analysis_inputs():
     """
-    Confirms user's choice of file to analyze; offers naming app result and launch button
-    """        
-    # get name of file and project and referenced sample from BaseSpace
+    Presents final confirmation to user before launching analysis.
+    Offers user form to name analysis (app result name currently).
+    Checks that user owns Project that contains input file; if not, uses 'PicardSpace Result' Project, which will be created if it doesn't already exist.
+    """
+    # get file_num and app_result_num that user selected    
+    if ('file_num' not in request.vars or
+        'ar_num' not in request.vars):
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num="", file_num="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")
+    
+    file_num = request.vars['file_num']
+    ar_num = request.vars['ar_num']
+
+
     user_row = db(db.auth_user.id==auth.user_id).select().first()
+    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
-        project = bs_api.getProjectById(session.writeback_project_num)
-        input_file = bs_api.getFileById(session.file_num)
+        launch_project = bs_api.getProjectById(ssn_row.project_num)
+        input_file = bs_api.getFileById(file_num)
         app_ssn = bs_api.getAppSession(session.app_session_num)
 
-        app_result = bs_api.getAppResultById(session.input_app_result_num)
+        app_result = bs_api.getAppResultById(ar_num)
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", err_msg=str(e))        
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, err_msg=str(e))        
 
     # get input file name
     session.file_name = input_file.Name
@@ -366,48 +339,113 @@ def confirm_analysis_inputs():
             return dict(sample_name="", file_name="", project_name="", err_msg=str(e))               
         sample_name = sample.Name               
 
+    # determine if user owns launch project, if not use 'PicardSpace Results' - won't create new project until after user confirms analysis
+    if user_row.username == launch_project.UserOwnedBy.Id:
+        # user is owner - assume they want to write back to source project
+        try:
+            project = bs_api.getProjectById(ssn_row.project_num)
+        except Exception as e:          
+            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, err_msg=str(e))        
+        proj_name = project.Name
+    else:
+        proj_name = 'PicardSpace Results'
+
     # add writeback message if writing to PicardSpace Results project
     writeback_msg = ""
     if project.Name == 'PicardSpace Results':
         writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
+            
+    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, err_msg="")        
+
+
+@auth.requires_login()
+def create_writeback_project():
+    """
+    Accepts app result name for new analysis and begins oauth process to start analysis
+    """
+    if ('ar_name' not in request.vars or
+        'ar_num' not in request.vars or
+        'file_num' not in request.vars):        
+        return dict(err_msg="We have a problem - expected query variables but didn't receive them")
     
-    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=str(project.Name), writeback_msg=writeback_msg, err_msg="")        
+    ar_name = request.vars['ar_name']
+    ar_num = request.vars['ar_num']
+    file_num = request.vars['file_num']
+    
+    # get session id and current user id from db
+    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
+    user_row = db(db.auth_user.id==auth.user_id).select().first()                    
+    app = db(db.app_data.id > 0).select().first()
+    try:
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)
+        launch_project = bs_api.getProjectById(ssn_row.project_num)
+    except Exception as e:
+        return dict(err_msg=str(e))
+    
+    # if the user doesn't own the Project they launched with - create 'PicardSpace Results' Project or use it if it already exists    
+    if user_row.username == launch_project.UserOwnedBy.Id:  
+        wb_proj_num = ssn_row.project_num
+    else:
+        try:
+            wb_proj = bs_api.createProject('PicardSpace Results')    
+        except Exception as e:
+            return dict(err_msg=str(e))
+        wb_proj_num = wb_proj.Id
+
+    # start oauth to get write project access, then start analysis
+    session.return_url = URL('start_analysis', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num, wb_proj_num=wb_proj_num))
+    redirect(URL('get_auth_code', vars=dict(scope='write project ' + str(wb_proj_num))))    
 
 
 @auth.requires_login()
 def get_auth_code():
     """
     Begin Oauth process to get write access to writeback project
-    """                        
-    scope = 'write project ' + str(session.writeback_project_num)    
+    """         
+    if ('scope' not in request.vars):
+        return dict(err_msg="We have a problem - expected scope but didn't receive it")
+    scope = request.vars['scope']
+    #scope = 'write project ' + str(session.writeback_project_num)    
     
     try:
         get_auth_code_util(scope)
     except Exception as e:
-        return dict(err_msg=str(e))    
-    
+        return dict(err_msg=str(e))            
+
 
 @auth.requires_login()
 def start_analysis():
     """
     Create an app result in BaseSpace and the local db, then queue the input BAM file for download from BaseSpace
     """
-    # record post var 'appresult_name', if present, in session var
-    if (request.post_vars.app_result_name):
-        session.app_result_name = request.post_vars.app_result_name
+    if ('ar_name' not in request.vars or
+        'wb_proj_num' not in request.vars or
+        'ar_num' not in request.vars or
+        'file_num' not in request.vars):        
+        return dict(err_msg="We have a problem - expected query variables but didn't receive them")
+    
+    ar_name = request.vars['ar_name']
+    wb_proj_num = request.vars['wb_proj_num']
+    ar_num = request.vars['ar_num']
+    file_num = request.vars['file_num']
+    
         
     # get session id and current user id from db
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
-    user_row = db(db.auth_user.id==auth.user_id).select().first()
-                 
-    # add new AppResult to BaseSpace
+    user_row = db(db.auth_user.id==auth.user_id).select().first()                    
     app = db(db.app_data.id > 0).select().first()
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
-        wb_proj = bs_api.getProjectById(session.writeback_project_num)
-        input_app_result = bs_api.getAppResultById(session.input_app_result_num)
+        #launch_project = bs_api.getProjectById(app_ssn_row.project_num)
+    except Exception as e:
+        return dict(err_msg=str(e))
+    
+    # add new AppResult to BaseSpace
+    try:    
+        wb_proj = bs_api.getProjectById(wb_proj_num)
+        input_app_result = bs_api.getAppResultById(ar_num)
         sample = bs_api.getSampleById(session.sample_num)
-        output_app_result = wb_proj.createAppResult(bs_api, session.app_result_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+        output_app_result = wb_proj.createAppResult(bs_api, ar_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
     
@@ -415,22 +453,22 @@ def start_analysis():
     input_app_result_id = db.input_app_result.insert(
         project_num=app_ssn_row.project_num,
         app_result_name=input_app_result.Name,
-        app_result_num=session.input_app_result_num,
+        app_result_num=ar_num,
         sample_num=session.sample_num)
     db.commit()
     
     # add input BAM file to db
     input_file_id = db.input_file.insert(
         app_result_id=input_app_result_id,
-        file_num=session.file_num, 
+        file_num=file_num, 
         file_name=session.file_name)
     db.commit()                    
                                                             
     # add new output AppResult to db            
     output_app_result_id = db.output_app_result.insert(
         app_session_id=app_ssn_row.id,
-        project_num=session.writeback_project_num,
-        app_result_name=session.app_result_name,
+        project_num=wb_proj_num,
+        app_result_name= ar_name,
         app_result_num=output_app_result.Id,
         sample_num=session.sample_num,        
         input_file_id=input_file_id)             
@@ -438,16 +476,19 @@ def start_analysis():
     
     # add BAM File to download queue 
     db.download_queue.insert(status='pending', input_file_id=input_file_id)    
+    
     # update AppSession status
-    app_ssn_row.update_record(status="input file queued for download")
+    app_ssn_row.update_record(status="beginning analysis", message="input file add to download queue")
     db.commit()    
     
+        
     # clear session vars - everything should be in db
     clear_session_vars()
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))    
-    
+
+
 
 @auth.requires_login()
 def view_results():

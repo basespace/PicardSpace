@@ -8,7 +8,7 @@ from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import shutil
 
 
-class File:
+class File(object):
     """
     A File in BaseSpace
     """
@@ -78,7 +78,7 @@ class AnalysisInputFile(File):
         db.commit()
 
 
-class AppResult:
+class AppResult(object):
     """
     An App Result in BaseSpace
     """

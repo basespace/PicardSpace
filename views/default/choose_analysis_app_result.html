@@ -8,14 +8,14 @@
 <p class="text-error lead">{{=err_msg}}</p>
 
 <form enctype="multipart/form-data" 
-    action="{{=URL('choose_analysis_file')}}" method="post">
+    action="{{=URL('choose_analysis_file')}}" method="get">
         <legend>Please select an AppResult from Project '{{=project_name}}':</legend>
     
     <! -- pre-check first radio button -->    
     {{ first = 0 }}
     {{for ar in ar_info:}}
         <label class="radio">
-            <input type="radio" name="ar_choice" id="{{=ar['app_result_name']}}" value="{{=ar['app_result_num']}}" {{ if first == 0:}}checked{{pass}}>
+            <input type="radio" name="ar_num" id="{{=ar['app_result_name']}}" value="{{=ar['app_result_num']}}" {{ if first == 0:}}checked{{pass}}>
             {{=ar['app_result_name']}}
             {{ first+=1 }}
         </label>
@@ -23,7 +23,9 @@
 
         <!-- pass back url of this page -->
         <input type="hidden" name="ar_back" value="{{=ar_back}}">
-        
+        <input type="hidden" name="ar_limit" value="{{=ar_limit}}">
+        <input type="hidden" name="ar_offset" value="{{=ar_offset}}">
+                
         <!-- horizontal divider -->
         <ul class = "nav nav-list">
             <li class="divider"></li>

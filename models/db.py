@@ -4,6 +4,10 @@ db = DAL('sqlite://storage.sqlite')
 from gluon import current
 current.db = db
 
+# only use secure cookies (cookie only sent over https), except when using localhost
+if not request.is_local:
+    session.secure()
+
 # store sessions in the db instead on the file system
 session.connect(request, response, db)
 
