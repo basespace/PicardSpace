@@ -15,12 +15,11 @@ def clear_session_vars():
     """
     Clear all session variables
     """
-    session.app_session_num = None    
+    session.app_session_num = None         # contains app sesssion num that user launched with from BaseSpace
     session.login_scope = None             # scope for OAuth2 during login    
-    session.file_name = None
     session.return_url = None              # TODO rename to nonlogin_return_url 
-    session.in_login = False  
-    session.token = None
+    session.in_login = False               # flag to handle_redirect_uri to tell if in login or non-login oauth
+    session.token = None                   # holds access token from login oauth for recording in db after login (since getting project scope during login)
 
 
 def handle_redirect_uri():
@@ -139,7 +138,7 @@ def index():
         login_url = URL('user', args=['login'], scheme=True, host=True)
 
                                     
-    return dict(main_msg=T(main_msg), scnd_msg=T(scnd_msg), err_msg=T(err_msg), login_url=login_url)
+    return dict(main_msg=main_msg, scnd_msg=scnd_msg, err_msg=err_msg, login_url=login_url)
 
 
 @auth.requires_login()
@@ -242,22 +241,17 @@ def choose_analysis_file():
     """
     Offers the user choice of file to analyze
     """
-    # require app result selection
-    if ('ar_num' not in request.vars):
-        redirect(URL('choose_analysis_app_result'))            
-    #session.input_app_result_num = request.vars['ar_num']
+    # get required inputs app result selection and back link
+    if ('ar_num' not in request.vars or
+        'ar_back' not in request.vars):
+        return dict(app_result_name="", file_info="", file_back="", ar_num="", ar_back="", err_msg="We have a problem - expected AppResult and back link but didn't receive them.")                 
+    
     ar_num = request.vars['ar_num']                      
-                
-    # get 'back' url of choose app result page                            
-    if (request.vars['ar_back']):
-        ar_back = request.vars['ar_back']
-    else:
-        ar_back = URL('choose_analysis_app_result')
-        
-    # check that session ar num is set (could've arrived from from back link)
-    #if (not session.input_app_result_num):    
-    #    return dict(app_result_name="", file_info="", ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg="We have a problem - expected AppResult info but didn't receive it")                  
-            
+    ar_back = request.vars['ar_back']                    
+    
+    # create 'back' link    
+    file_back = URL('choose_analysis_file', vars=dict(ar_num=ar_num, ar_back=ar_back))
+                  
     # get list of BAM files for this AppResult from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()
@@ -266,7 +260,7 @@ def choose_analysis_file():
         app_result = bs_api.getAppResultById(ar_num)
         bs_files = app_result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
     except Exception as e:
-        return dict(app_result_name="", file_info="", ar_back=ar_back, ar_num=ar_num, err_msg=str(e))     
+        return dict(app_result_name="", file_info="", file_back=file_back, ar_num=ar_num, ar_back=ar_back, err_msg=str(e))     
     
     # get Sample name from relationship to AppResult for display
     samples = app_result.getReferencedSamples(bs_api)
@@ -292,7 +286,7 @@ def choose_analysis_file():
     
     app_result_name=app_result.Name + " - " + ', '.join(samples_names)
     
-    return dict(app_result_name=app_result_name, file_info=file_info, ar_back=ar_back, ar_num=ar_num, err_msg="")
+    return dict(app_result_name=app_result_name, file_info=file_info, file_back=file_back, ar_num=ar_num, ar_back=ar_back, err_msg="")
 
 
 @auth.requires_login()
@@ -305,11 +299,13 @@ def confirm_analysis_inputs():
     """
     # get file_num and app_result_num that user selected    
     if ('file_num' not in request.vars or
-        'ar_num' not in request.vars):
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num="", file_num="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")
+        'ar_num' not in request.vars or
+        'file_back' not in request.vars):
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num="", file_num="", file_back="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")
     
     file_num = request.vars['file_num']
     ar_num = request.vars['ar_num']
+    file_back = request.vars['file_back']
 
 
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -324,19 +320,17 @@ def confirm_analysis_inputs():
         app_result = bs_api.getAppResultById(ar_num)
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, err_msg=str(e))        
-
-    # get input file name
-    session.file_name = input_file.Name
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg=str(e))        
     
-    # get sample num and name from AppResult, if present
+    # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
     sample_name = "unknown"
     if samples_ids:
-        session.sample_num = samples_ids[0]
+        sample_num = samples_ids[0]
         try:
-            sample = bs_api.getSampleById(session.sample_num)
-        except Exception as e:
-            return dict(sample_name="", file_name="", project_name="", err_msg=str(e))               
+            sample = bs_api.getSampleById(sample_num)
+        except Exception as e:  
+            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg=str(e))        
+             
         sample_name = sample.Name               
 
     # determine if user owns launch project, if not use 'PicardSpace Results' - won't create new project until after user confirms analysis
@@ -345,7 +339,7 @@ def confirm_analysis_inputs():
         try:
             project = bs_api.getProjectById(ssn_row.project_num)
         except Exception as e:          
-            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, err_msg=str(e))        
+            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg=str(e))        
         proj_name = project.Name
     else:
         proj_name = 'PicardSpace Results'
@@ -355,7 +349,7 @@ def confirm_analysis_inputs():
     if project.Name == 'PicardSpace Results':
         writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
             
-    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, err_msg="")        
+    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg="")        
 
 
 @auth.requires_login()
@@ -405,7 +399,6 @@ def get_auth_code():
     if ('scope' not in request.vars):
         return dict(err_msg="We have a problem - expected scope but didn't receive it")
     scope = request.vars['scope']
-    #scope = 'write project ' + str(session.writeback_project_num)    
     
     try:
         get_auth_code_util(scope)
@@ -430,21 +423,31 @@ def start_analysis():
     file_num = request.vars['file_num']
     
         
-    # get session id and current user id from db
+    # get input app result and sample objs from Basespace
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()                    
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)
-        #launch_project = bs_api.getProjectById(app_ssn_row.project_num)
+        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)            
+        input_app_result = bs_api.getAppResultById(ar_num)
+        samples_ids = input_app_result.getReferencedSamplesIds()
     except Exception as e:
         return dict(err_msg=str(e))
     
+    # get Samples referenced from AppResult - only recognizing single sample per app result for now
+    sample_num = None
+    sample = None
+    if samples_ids:
+        sample_num = samples_ids[0]
+        try:
+            sample = bs_api.getSampleById(sample_num)
+        except Exception as e:
+            return dict(err_msg=str(e))
+            
     # add new AppResult to BaseSpace
-    try:    
-        wb_proj = bs_api.getProjectById(wb_proj_num)
-        input_app_result = bs_api.getAppResultById(ar_num)
-        sample = bs_api.getSampleById(session.sample_num)
+    try:
+        wb_proj = bs_api.getProjectById(wb_proj_num)    
+        input_file = bs_api.getFileById(file_num)
         output_app_result = wb_proj.createAppResult(bs_api, ar_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
     except Exception as e:
         return dict(err_msg=str(e))
@@ -454,14 +457,14 @@ def start_analysis():
         project_num=app_ssn_row.project_num,
         app_result_name=input_app_result.Name,
         app_result_num=ar_num,
-        sample_num=session.sample_num)
+        sample_num=sample_num)
     db.commit()
     
     # add input BAM file to db
     input_file_id = db.input_file.insert(
         app_result_id=input_app_result_id,
         file_num=file_num, 
-        file_name=session.file_name)
+        file_name=input_file.Name)
     db.commit()                    
                                                             
     # add new output AppResult to db            
@@ -470,7 +473,7 @@ def start_analysis():
         project_num=wb_proj_num,
         app_result_name= ar_name,
         app_result_num=output_app_result.Id,
-        sample_num=session.sample_num,        
+        sample_num=sample_num,        
         input_file_id=input_file_id)             
     db.commit()
     
@@ -480,14 +483,12 @@ def start_analysis():
     # update AppSession status
     app_ssn_row.update_record(status="beginning analysis", message="input file add to download queue")
     db.commit()    
-    
-        
+            
     # clear session vars - everything should be in db
     clear_session_vars()
 
     # redirect user to view_results page -- with message that their analysis started
     redirect(URL('view_results', vars=dict(message='Your Analysis Has Started!')))    
-
 
 
 @auth.requires_login()
@@ -519,7 +520,7 @@ def view_results():
     try:
         bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
     except Exception as e:
-        return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg="")
+        return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))
     
     # TODO re-add sort by date created -- just reverse rows?
     # get app sessions for the current user, sorted by date created, limited to offset and limit    
@@ -534,15 +535,15 @@ def view_results():
         ar_end = ar_tot                                                    
     
     for ssn_row in ssn_rows:
-        # should be only one app result per app session
+        # handling only one app result per app session
         rslt_row = db(db.output_app_result.app_session_id==ssn_row.id).select().first()
-
         # get project name for each AppResult    
         if rslt_row:
             try:
                 proj = bs_api.getProjectById(rslt_row.project_num)
-            except Exception as e:
-                return dict(message=T(message), app_ssns=app_ssns, err_msg=T(str(e)))                                  
+            except Exception as e:                 
+                return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))
+                                
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
         else:                 
@@ -578,7 +579,6 @@ def view_alignment_metrics():
     hdr = ""
     aln_tbl = []
     tps_aln_tbl = [["data not available"]]
-    file_name = "unknown"
     
     # get AppResult from db
     user_row = db(db.auth_user.id==auth.user_id).select().first()
@@ -665,7 +665,9 @@ def view_alignment_metrics():
             shutil.rmtree(os.path.dirname(local_path))            
         except Exception as e:
             return(dict(aln_tbl=tps_aln_tbl, 
-                hdr=hdr, sample_name=sample.Name, 
+                hdr=hdr, 
+                sample_name=sample.Name, 
+                sample_num=sample.Id,
                 input_file_name=input_file_row.file_name, 
                 input_project_name=input_project.Name, 
                 input_app_result_name=input_ar_row.app_result_name,  
@@ -674,7 +676,6 @@ def view_alignment_metrics():
                 ar_back=ar_back, 
                 err_msg=str(e)))
 
-    # TODO check that user is correct (could jump to this page as another user)
     return(dict(aln_tbl=tps_aln_tbl, 
         hdr=hdr, 
         sample_name=sample.Name, 
