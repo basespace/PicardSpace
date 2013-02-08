@@ -33,7 +33,6 @@ def handle_redirect_uri():
     # handle case: just launched from BaseSpace 
     if (request.get_vars.appsessionuri):
         
-        # TODO move to separate method        
         # clear all session variables
         clear_session_vars()
         
@@ -80,7 +79,6 @@ def handle_redirect_uri():
         if session.in_login:
             redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code) ) )
 
-        # TODO move to separate method?
         # non-login oauth2                        
         try:
             access_token = get_access_token_util(request.get_vars.code)
@@ -109,7 +107,6 @@ def handle_redirect_uri():
 
     # shouldn't reach this point - redirect to index page
     redirect(URL('index'))     
-    #return dict(err_msg="Error - didn't recognize query variables")
                                             
 
 def index():
@@ -136,7 +133,6 @@ def index():
         login_url = URL('user', args=['login'], scheme=True, host=True, port=8000)  # vars=dict(_next=URL('user_now_logged_in')), 
     else:
         login_url = URL('user', args=['login'], scheme=True, host=True)
-
                                     
     return dict(main_msg=main_msg, scnd_msg=scnd_msg, err_msg=err_msg, login_url=login_url)
 
@@ -522,7 +518,6 @@ def view_results():
     except Exception as e:
         return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))
     
-    # TODO re-add sort by date created -- just reverse rows?
     # get app sessions for the current user, sorted by date created, limited to offset and limit    
     ssn_rows = db(db.app_session.user_id==auth.user_id).select(limitby=(ar_offset, ar_offset+ar_limit), orderby=~db.app_session.date_created)
 

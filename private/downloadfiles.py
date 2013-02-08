@@ -31,6 +31,10 @@ while True:
             row.update_record(status='complete')
         db.commit()
 
-    time.sleep(5) # check every x seconds
+    # commit db -- reqd to get a new db transaction after every sleep
+    db.commit()
+
+    # check every x seconds
+    time.sleep(5) 
 
 #python web2py.py -S PicardSpace -M -R applications/PicardSpace/private/downloadfiles.py
