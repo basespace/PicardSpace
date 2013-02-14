@@ -8,6 +8,7 @@ from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import shutil
 
 
+
 class File(object):
     """
     A File in BaseSpace
@@ -24,7 +25,7 @@ class File(object):
         Download a file from BaseSpace into the provided directory (created if doesn't exist)
         """
         db = current.db
-        # get access token for app session's user (can't use current user since accessing from cron script)        
+        # get access token for app session's user (can't use current user since accessing from 'cron' script)        
         ssn_row = db(db.app_session.id==app_session_id).select().first()
         user_row = db(db.auth_user.id==ssn_row.user_id).select().first()                        
                         
@@ -46,11 +47,12 @@ class AnalysisInputFile(File):
     """
     Class to download, analyze, and write-back results of a single file    
     """
-    def download_and_analyze(self):
+    def download_and_queue_analysis(self):
         """
         Download file contents from BaseSpace and queue the file for analysis
         """           
         db = current.db  
+        q = current.q
         # get input file and output app result info from database        
         ar_row = db(db.output_app_result.input_file_id==self.bs_file_id).select().first()
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
@@ -63,19 +65,28 @@ class AnalysisInputFile(File):
         local_dir = os.path.join(current.request.folder, "private", "downloads", "inputs", str(ssn_row.app_session_num))
 
         # download file from BaseSpace
-        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
+        try:
+            local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
+        except Exception as e:
+            print "Error: {0}".format(str(e)) # won't reach user
 
-        # update file's local path
-        file_row = db(db.input_file.id==self.bs_file_id).select().first()     
-        file_row.update_record(local_path=local_file)
-        db.commit()               
+            # update download queue and AppSession status in db            
+            ssn_row.update_record(status='aborted', message=str(e))
+            db.commit()
+        else:
+            # update file's local path
+            file_row = db(db.input_file.id==self.bs_file_id).select().first()     
+            file_row.update_record(local_path=local_file)
+            db.commit()               
         
-        # add file to analysis queue
-        db.analysis_queue.insert(status='pending', input_file_id=self.bs_file_id)
+            # add file to analysis queue                        
+            q.enqueue_call(func=analyze_bs_file, 
+                   args=(self.bs_file_id,),
+                   timeout=86400) # seconds
 
-        # update app_session status to 'download complete, in analysis queue'
-        ssn_row.update_record(status="queued for analysis", message="download complete")
-        db.commit()
+            # update app_session status to 'download complete, in analysis queue'
+            ssn_row.update_record(status="queued for analysis", message="download complete")
+            db.commit()
 
 
 class AppResult(object):
@@ -90,7 +101,7 @@ class AppResult(object):
         self.app_result_num = app_result_num                    
         
         self.output_files = []           
-
+            
 
     def run_analysis_and_writeback(self, input_file):
         """
@@ -290,3 +301,81 @@ def get_access_token_util(auth_code):
     # set token in session var
     current.session.token = access_token                  
     return access_token
+
+
+def download_bs_file(input_file_id):
+    """
+    Downloads file from BaseSpace -- called from queue
+    """
+    db = current.db
+
+    # get queued file from db
+    f_row = db(db.input_file.id==input_file_id).select().first()
+    ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
+    ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
+
+    # create a File object
+    als_file = AnalysisInputFile(
+        app_result_id=f_row.app_result_id,
+        bs_file_id=f_row.id,
+        file_num=f_row.file_num,
+        file_name=f_row.file_name,
+        local_path=f_row.local_path)
+
+    # download the file from BaseSpace
+    try:
+        als_file.download_and_queue_analysis()
+    except Exception as e:            
+        print "Error: {0}".format(str(e))
+
+        # update AppSession status in db        
+        ssn_row.update_record(status='aborted', message=str(e))            
+        db.commit()
+
+
+def analyze_bs_file(input_file_id):
+    """
+    Analyzes file from BaseSpace -- called from queue
+    """
+    db = current.db
+
+    # get queued app result from db
+    f_row = db(db.input_file.id==input_file_id).select().first()
+    ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
+
+    input_file = AnalysisInputFile(
+        app_result_id=f_row.app_result_id,
+        file_num=f_row.file_num,
+        file_name=f_row.file_name,
+        local_path=f_row.local_path)
+
+    # create AppResult object to analyze downloaded File
+    app_result = AppResult(
+        app_result_id=ar_row.id,
+        app_session_id=ar_row.app_session_id,
+        project_num=ar_row.project_num,
+        app_result_name=ar_row.app_result_name,
+        app_result_num=ar_row.app_result_num)        
+        
+    # run analysis and writeback results to BaseSpace                        
+    message = 'None'
+    try:                        
+        app_result.run_analysis_and_writeback(input_file) 
+                                           
+    except Exception as e:                                
+        message = str(e)
+        if e.message:
+            message = message + " - " + e.message
+        
+        # append error message to existing app ssn status msg (keep context);
+        message = app_result.status_message() + "; " + message
+        print "Error: {0}".format(message)
+
+        # update AppSession status in db and BaseSpace            
+        try:            
+            app_result.update_status('aborted', message, 'aborted')
+        except Exception as e:
+            # print err msg,  but not in db (user won't see it)
+            print "Error updating AppSession status: {0} - {1}".format(str(e), e.message) 
+            
+

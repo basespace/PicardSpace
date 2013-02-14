@@ -3,7 +3,7 @@
 import os.path
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
-from picardSpace import File, readable_bytes, get_auth_code_util, get_access_token_util
+from picardSpace import File, AnalysisInputFile, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 import shutil
 
 # Auth notes:
@@ -464,7 +464,7 @@ def start_analysis():
     db.commit()                    
                                                             
     # add new output AppResult to db            
-    output_app_result_id = db.output_app_result.insert(
+    db.output_app_result.insert(
         app_session_id=app_ssn_row.id,
         project_num=wb_proj_num,
         app_result_name= ar_name,
@@ -472,12 +472,14 @@ def start_analysis():
         sample_num=sample_num,        
         input_file_id=input_file_id)             
     db.commit()
-    
-    # add BAM File to download queue 
-    db.download_queue.insert(status='pending', input_file_id=input_file_id)    
+
+    # add BAM File to download queue
+    q.enqueue_call(func=download_bs_file, 
+                   args=(input_file_id,),
+                   timeout=86400) # seconds
     
     # update AppSession status
-    app_ssn_row.update_record(status="beginning analysis", message="input file add to download queue")
+    app_ssn_row.update_record(status="beginning analysis", message="input file added to download queue")
     db.commit()    
             
     # clear session vars - everything should be in db

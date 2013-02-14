@@ -52,7 +52,7 @@ auth.settings.registration_requires_approval = False
 auth.settings.reset_password_requires_verification = True
 
 # auto-logout - doesn't seem to be working for unknown reason
-auth.settings.expiration = 30  # seconds
+auth.settings.expiration = 3600  # seconds
 
 
 # define global vars
@@ -73,6 +73,8 @@ db.define_table('app_data',
     Field('auth_url', default='https://cloud-hoth.illumina.com/oauth/authorize'),                 # portal hoth
     Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),      # portal hoth    
     Field('redirect_uri', default=''),
+    Field('redis_host', default='localhost'),
+    Field('redis_port', default=6379),
     Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
 
 # create an instance of app_data table if not present

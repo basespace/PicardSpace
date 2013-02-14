@@ -16,22 +16,26 @@ Setup
         cd web2py/applications
         git clone https://github.com/basespace/PicardSpace.git
 
-3. Start web2py, first navigating to the main 'web2py' directory. A web browser should launch with address localhost:8000).
+3. Install redis and python-rq
+
+        sudo apt-get install redis-server
+        sudo pip install rq
+
+4. Start web2py, first navigating to the main 'web2py' directory. A web browser should launch with address localhost:8000).
 
         cd ..
         python web2py.py
 
-4. Start the download and analysis scripts:
+5. Start the download and analysis queues:
 
-        python web2py.py -S PicardSpace -M -R applications/PicardSpace/private/downloadfiles.py &
-        python web2py.py -S PicardSpace -M -R applications/PicardSpace/private/analyzefiles.py &
+        python web2py.py -S PicardSpace -M -R applications/PicardSpace/private/web2py-rq.py
 
-5. Register your new PicardSpace app on the BaseSpace dev portal (developer.basespace.illumina.com) with these settings:
+6. Register your new PicardSpace app on the BaseSpace dev portal (developer.basespace.illumina.com) with these settings:
 App Launch Location: Projects
 Home Page: localhost:8000/PicardSpace
 Redirect URI: localhost:8000/PicardSpace
 
-6. Go to BaseSpace.com and launch your new app from any Project that contains an AppResult with a BAM file.
+7. Go to BaseSpace.com and launch your new app from any Project that contains an AppResult with a BAM file.
 
 
 Production Deployment
