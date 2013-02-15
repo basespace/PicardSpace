@@ -264,11 +264,11 @@ db.define_table('output_file',
     Field('file_name'),
     Field('local_path'))
 
-db.define_table('download_queue',
-    Field('status'),
-    Field('input_file_id', db.input_file))
-        
-db.define_table('analysis_queue',
-    Field('status'),
-    Field('message'),
-    Field('input_file_id', db.input_file))
+#db.define_table('download_queue',
+#    Field('status'),
+#    Field('input_file_id', db.input_file))
+#        
+#db.define_table('analysis_queue',
+#    Field('status'),
+#    Field('message'),
+#    Field('input_file_id', db.input_file))
