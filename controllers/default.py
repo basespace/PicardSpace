@@ -150,13 +150,12 @@ def user_now_logged_in():
         app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
         app_ssn_row.update_record(user_id=auth.user_id)
 
-        # record access token from login (needed since web2py will only record token on very first login)
+        # if just logged into session, record access token (needed since web2py will only record token on very first login)        
         if session.token:
             user_row = db(db.auth_user.id==auth.user_id).select().first()
             user_row.update_record(access_token=session.token)
             session.token = None
         
-        #redirect(URL('choose_analysis_app_result'))
         redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
 
 

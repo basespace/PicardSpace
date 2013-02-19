@@ -114,8 +114,8 @@ class BaseSpaceAccount(object):
         self.globals = globals()
         self.client_id = app.client_id
         self.client_secret = app.client_secret
-        self.request = self.globals['request']
-        self.session = self.globals['session']
+        #self.request = self.globals['request']
+        #self.session = self.globals['session']
         self.auth_url = app.auth_url
         self.token_url = app.token_url
         self.args = None
@@ -136,24 +136,24 @@ class BaseSpaceAccount(object):
                         access_token = user_row.access_token)
                     
         # if we have a new token, get current user info
-        if self.session.token:
+        if session.token:
             
             app_ssn_num = ""
             app = db(db.app_data.id > 0).select().first()
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, self.session.token)
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, session.token)
         
             user = None
             #try:
             user = bs_api.getUserById("current")
             #except:
                 # TODO how to handle this error? need to handle here since get_user isn't wrapped with try except in web2py login(); redirect to error page? can't just return None since this will end in redirect loop (endless login attempts)
-                #self.session.token = None            
+                #session.token = None            
         
             if user:
                 return dict(first_name = user.Name,
                         email = user.Email,
                         username = user.Id,
-                        access_token = self.session.token)
+                        access_token = session.token)
 
         # user isn't logged in, return None        
         return None
@@ -172,7 +172,7 @@ class BaseSpaceAccount(object):
         # set redirect_uri if it isn't set yet (only done on very first login)
         app = db(db.app_data.id > 0).select().first()
         if not app.redirect_uri:
-            if (current.request.is_local):                
+            if (request.is_local):                
                 redirect_uri = URL('handle_redirect_uri', scheme=True, host=True, port=8000)
             else:                
                 redirect_uri = URL('handle_redirect_uri', scheme=True, host=True)
@@ -181,28 +181,28 @@ class BaseSpaceAccount(object):
         
         
         # handle errors from BaseSpace during login        
-        if self.request.vars.error:
+        if request.vars.error:
             # TODO is this the best way to handle this error?
             HTTP = self.globals['HTTP']            
             raise HTTP(200, "Permission to access BaseSpace data was rejected by the user", Location=None)
                 
         # just received auth code from BaseSpace, trade it for an access token
-        if self.request.vars.code:            
-            self.session.token = get_access_token_util(self.request.vars.code)           
+        if request.vars.code:            
+            session.token = get_access_token_util(request.vars.code)           
             
             # reset login state vars
-            self.session.login_scope = None
-            self.session.in_login = False
+            session.login_scope = None
+            session.in_login = False
             return
                         
         # start Oauth2 - get an auth code for this login, handles launch from BaseSpace and PicardSpace login button
         # TODO if user is already logged into PicardSpace, check that current BS user matches                                                                                            
         # adding state var so can return to login process from redirect uri 
-        self.session.in_login = True
+        session.in_login = True
 
         # redirect to BaseSpace to get auth code -- will return to redirect_uri
         # TODO how to handle exception here?                                                
-        get_auth_code_util(self.session.login_scope)                                  
+        get_auth_code_util(session.login_scope)                                  
 
 
     def login_url(self, next="/"):
@@ -214,7 +214,7 @@ class BaseSpaceAccount(object):
         return
 
     def logout_url(self, next="/"):
-        del self.session.token
+        del session.token
         # TODO necessary?
         current.session.auth = None
         return next

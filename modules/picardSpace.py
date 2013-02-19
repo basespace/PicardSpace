@@ -309,6 +309,9 @@ def download_bs_file(input_file_id):
     """
     db = current.db
 
+    # refresh database connection -- needed for mysql RDS
+    db.commit()
+
     # get queued file from db
     f_row = db(db.input_file.id==input_file_id).select().first()
     ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
@@ -338,6 +341,9 @@ def analyze_bs_file(input_file_id):
     Analyzes file from BaseSpace -- called from queue
     """
     db = current.db
+
+    # refresh database connection -- needed for mysql RDS
+    db.commit()
 
     # get queued app result from db
     f_row = db(db.input_file.id==input_file_id).select().first()
