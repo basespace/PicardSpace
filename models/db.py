@@ -119,7 +119,7 @@ class BaseSpaceAccount(object):
         self.auth_url = app.auth_url
         self.token_url = app.token_url
         self.args = None
-        self.token = None
+        #session.token = None
 
     def get_user(self):
         """
@@ -137,11 +137,11 @@ class BaseSpaceAccount(object):
                         access_token = user_row.access_token)
                     
         # if we have a new token, get current user info
-        if self.token:
-            token = self.token
+        if session.token:
+            token = session.token
             
             # clear new token
-            self.token = None
+            session.token = None
             
             app_ssn_num = ""
             app = db(db.app_data.id > 0).select().first()
@@ -152,7 +152,7 @@ class BaseSpaceAccount(object):
             user = bs_api.getUserById("current")
             #except:
                 # TODO how to handle this error? need to handle here since get_user isn't wrapped with try except in web2py login(); redirect to error page? can't just return None since this will end in redirect loop (endless login attempts)
-                #self.token = None            
+                #session.token = None            
         
             if user:
                 return dict(first_name = user.Name,
@@ -193,7 +193,7 @@ class BaseSpaceAccount(object):
                 
         # just received auth code from BaseSpace, trade it for an access token
         if request.vars.code:            
-            self.token = get_access_token_util(request.vars.code)           
+            session.token = get_access_token_util(request.vars.code)           
             
             # reset login state vars
             session.login_scope = None
@@ -223,7 +223,7 @@ class BaseSpaceAccount(object):
     def logout_url(self, next="/"):
         """
         """
-        self.token = None
+        session.token = None
         session.auth = None
         return next
 
