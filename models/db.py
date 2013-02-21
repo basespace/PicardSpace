@@ -43,8 +43,9 @@ auth.settings.actions_disabled.append('request_reset_password')
 auth.settings.actions_disabled.append('impersonate')
 auth.settings.actions_disabled.append('groups')
 
-# set page that user sees after logging in
+# set page that user sees after logging in, out
 auth.settings.login_next = URL('user_now_logged_in')
+auth.settings.logout_next = 'http://basespace.illumina.com'
 
 ## configure auth policy
 auth.settings.registration_requires_verification = False
@@ -95,14 +96,13 @@ class BaseSpaceAccount(object):
     
     During Oauth2, an auth code if first requested, which returns control to BaseSpace. 
     BaseSpace redirects to the redirect_uri, which is handled by a controller method, 
-    which in turn calls login() again to return here, where the auth code is traded for an access token.
+    which in turn calls login() again to return here, where the auth code is traded for an access token (in get_user()).
     
-    Web2py only records in the db the first access token ever encountered for a user (in addition to user name, email, and BaseSpace id). 
-    For subsequent tokens, the token is store in a session var, 
-    and the token is store in in the db in a controller method immeadietely after login() completes.
+    Web2py login only records in the db the first access token ever encountered for a user (in addition to user name, email, and BaseSpace id). 
+    Tokens that acquired outside of login, e.g. to browse a Project, are written to the user table directly and overwrite the previous token.
     
     Login() is called by the following cases:
-    1. User launched from BaseSpace
+    1. User launches from BaseSpace
     2. User logs in with 'login' button on index page (outside BaseSpace)
     3. Decorators - the controller method decorators @requires_login calls login when a user isn't logged when the method is called    
     
@@ -119,6 +119,7 @@ class BaseSpaceAccount(object):
         self.auth_url = app.auth_url
         self.token_url = app.token_url
         self.args = None
+        self.token = None
 
     def get_user(self):
         """
@@ -136,24 +137,28 @@ class BaseSpaceAccount(object):
                         access_token = user_row.access_token)
                     
         # if we have a new token, get current user info
-        if session.token:
+        if self.token:
+            token = self.token
+            
+            # clear new token
+            self.token = None
             
             app_ssn_num = ""
             app = db(db.app_data.id > 0).select().first()
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, session.token)
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, token)
         
             user = None
             #try:
             user = bs_api.getUserById("current")
             #except:
                 # TODO how to handle this error? need to handle here since get_user isn't wrapped with try except in web2py login(); redirect to error page? can't just return None since this will end in redirect loop (endless login attempts)
-                #session.token = None            
+                #self.token = None            
         
             if user:
                 return dict(first_name = user.Name,
                         email = user.Email,
                         username = user.Id,
-                        access_token = session.token)
+                        access_token = token)
 
         # user isn't logged in, return None        
         return None
@@ -188,7 +193,7 @@ class BaseSpaceAccount(object):
                 
         # just received auth code from BaseSpace, trade it for an access token
         if request.vars.code:            
-            session.token = get_access_token_util(request.vars.code)           
+            self.token = get_access_token_util(request.vars.code)           
             
             # reset login state vars
             session.login_scope = None
@@ -202,7 +207,8 @@ class BaseSpaceAccount(object):
 
         # redirect to BaseSpace to get auth code -- will return to redirect_uri
         # TODO how to handle exception here?                                                
-        get_auth_code_util(session.login_scope)                                  
+        #get_auth_code_util(session.login_scope)
+        get_auth_code_util(scope="")                                  
 
 
     def login_url(self, next="/"):
@@ -211,12 +217,14 @@ class BaseSpaceAccount(object):
         This is includes call from '@requires_login' method decorators when a user isn't logged in.
         """            
         self.__oauth_login()
+        #return next
         return
 
     def logout_url(self, next="/"):
-        del session.token
-        # TODO necessary?
-        current.session.auth = None
+        """
+        """
+        self.token = None
+        session.auth = None
         return next
 
 # instantiate Oauth2 login form

@@ -9,17 +9,17 @@ import shutil
 # Auth notes:
 # 1. All '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called (and _next=controller_method)
 # 2. Once a user is logged into picardSpace, they can use their existing tokens to view the results -- even if they log out of BaseSpace -- because tokens are good regardless of BaseSpace login
-#
+
 
 def clear_session_vars():
     """
     Clear all session variables
     """
     session.app_session_num = None         # contains app sesssion num that user launched with from BaseSpace
-    session.login_scope = None             # scope for OAuth2 during login    
-    session.return_url = None              # TODO rename to nonlogin_return_url 
-    session.in_login = False               # flag to handle_redirect_uri to tell if in login or non-login oauth
-    session.token = None                   # holds access token from login oauth for recording in db after login (since getting project scope during login)
+    #session.login_scope = None             # scope for OAuth2 during login    
+    session.oauth_return_url = None        # the url to return to when oauth is complete 
+    session.in_login = False               # flag to handle_redirect_uri() to determine if in login or non-login oauth
+    #session.token = None                   # holds access token from login oauth for recording in db after login (since getting project scope during login)
 
 
 def handle_redirect_uri():
@@ -55,10 +55,10 @@ def handle_redirect_uri():
         else:            
             ref_content = ssn_ref.Content
             project_num = ref_content.Id
-            session.login_scope = ref_content.getAccessStr(scope='read')
+            #session.login_scope = ref_content.getAccessStr(scope='read')
             
             # add ability to create project for writeback if needed
-            session.login_scope += ', create projects'                                
+            #session.login_scope += ', create projects'                                
             
             # create app_session in db
             app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
@@ -68,7 +68,7 @@ def handle_redirect_uri():
                 message="newly launched App Session - no analysis performed yet")
             
             # log user into PicardSpace (user should already be logged into BaseSpace)            
-            session.return_url = URL('user_now_logged_in')            
+            session.oauth_return_url = URL('user_now_logged_in')            
             redirect( URL('user', args=['login']) )
                                                                                                                                                                                                                                                                                                                                                                                               
 
@@ -77,7 +77,12 @@ def handle_redirect_uri():
         
         # complete login, if login is in progress
         if session.in_login:
-            redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code) ) )
+            #redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code, next=URL('user_now_logged_in'))))
+            redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code)))
+
+        # ensure user is logged in
+        if not session.auth:
+            return dict(err_msg="Error - user isn't logged in but should be")
 
         # non-login oauth2                        
         try:
@@ -103,7 +108,7 @@ def handle_redirect_uri():
         db.commit()
             
         # go to url specified by original call to get token
-        redirect(session.return_url)            
+        redirect(session.oauth_return_url)            
 
     # shouldn't reach this point - redirect to index page
     redirect(URL('index'))     
@@ -147,16 +152,19 @@ def user_now_logged_in():
         redirect(URL('view_results'))
     else:            
         # an app session num was provided, update app session with user info
-        app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
-        app_ssn_row.update_record(user_id=auth.user_id)
+        ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
+        ssn_row.update_record(user_id=auth.user_id)
 
         # if just logged into session, record access token (needed since web2py will only record token on very first login)        
-        if session.token:
-            user_row = db(db.auth_user.id==auth.user_id).select().first()
-            user_row.update_record(access_token=session.token)
-            session.token = None
+        #if session.token:
+        #    user_row = db(db.auth_user.id==auth.user_id).select().first()
+        #    user_row.update_record(access_token=session.token)
+        #    session.token = None
         
-        redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
+        # start oauth to get browse access to launch Project and to create new Projects for writeback
+        session.oauth_return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
+        redirect(URL('get_auth_code', vars=dict(scope='create projects, browse project ' + str(ssn_row.project_num))))
+        #redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
 
 
 @auth.requires_login()
@@ -382,7 +390,7 @@ def create_writeback_project():
         wb_proj_num = wb_proj.Id
 
     # start oauth to get write project access, then start analysis
-    session.return_url = URL('start_analysis', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num, wb_proj_num=wb_proj_num))
+    session.oauth_return_url = URL('start_analysis', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num, wb_proj_num=wb_proj_num))
     redirect(URL('get_auth_code', vars=dict(scope='write project ' + str(wb_proj_num))))    
 
 
