@@ -19,7 +19,7 @@ def clear_session_vars():
     #session.login_scope = None             # scope for OAuth2 during login    
     session.oauth_return_url = None        # the url to return to when oauth is complete 
     session.in_login = False               # flag to handle_redirect_uri() to determine if in login or non-login oauth
-    #session.token = None                   # holds access token from login oauth for recording in db after login (since getting project scope during login)
+    session.token = None                   # temporarily holds access token from login oauth
 
 
 def handle_redirect_uri():

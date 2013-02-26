@@ -119,7 +119,6 @@ class BaseSpaceAccount(object):
         self.auth_url = app.auth_url
         self.token_url = app.token_url
         self.args = None
-        #session.token = None
 
     def get_user(self):
         """
@@ -128,7 +127,7 @@ class BaseSpaceAccount(object):
         Otherwise return None.       
         """
         # if a user is already logged in, return user info from db
-        if current.session.auth:
+        if session.auth:
             user_row = db(db.auth_user.id==auth.user_id).select().first()
             
             return dict(first_name = user_row.first_name,
@@ -152,14 +151,12 @@ class BaseSpaceAccount(object):
             user = bs_api.getUserById("current")
             #except:
                 # TODO how to handle this error? need to handle here since get_user isn't wrapped with try except in web2py login(); redirect to error page? can't just return None since this will end in redirect loop (endless login attempts)
-                #session.token = None            
         
             if user:
                 return dict(first_name = user.Name,
                         email = user.Email,
                         username = user.Id,
                         access_token = token)
-
         # user isn't logged in, return None        
         return None
         
@@ -184,7 +181,6 @@ class BaseSpaceAccount(object):
             app.update_record(redirect_uri=redirect_uri)
             db.commit()
         
-        
         # handle errors from BaseSpace during login        
         if request.vars.error:
             # TODO is this the best way to handle this error?
@@ -194,20 +190,16 @@ class BaseSpaceAccount(object):
         # just received auth code from BaseSpace, trade it for an access token
         if request.vars.code:            
             session.token = get_access_token_util(request.vars.code)           
-            
-            # reset login state vars
-            session.login_scope = None
             session.in_login = False
             return
                         
-        # start Oauth2 - get an auth code for this login, handles launch from BaseSpace and PicardSpace login button
-        # TODO if user is already logged into PicardSpace, check that current BS user matches                                                                                            
-        # adding state var so can return to login process from redirect uri 
+        # start login Oauth2 - get an auth code for this login, record login state for handle_redirect_uri()
+        # TODO if user is already logged into PicardSpace, check that current BS user matches?                                                                                          
         session.in_login = True
 
         # redirect to BaseSpace to get auth code -- will return to redirect_uri
         # TODO how to handle exception here?                                                
-        #get_auth_code_util(session.login_scope)
+        # TODO the below method should return a url, then redirect here -- too confusing to follow otherwise
         get_auth_code_util(scope="")                                  
 
 
