@@ -17,7 +17,6 @@ def clear_session_vars():
     Clear all session variables
     """
     session.app_session_num = None         # contains app sesssion num that user launched with from BaseSpace
-    #session.login_scope = None             # scope for OAuth2 during login    
     session.oauth_return_url = None        # the url to return to when oauth is complete 
     session.in_login = False               # flag to handle_redirect_uri() to determine if in login or non-login oauth
     session.token = None                   # temporarily holds access token from login oauth
@@ -25,6 +24,10 @@ def clear_session_vars():
 
 def handle_redirect_uri():
     """
+    This method is called from BaseSpace when: 
+    1) the app is launched
+    2) an auth code is returned from either login or non-login oauth2    
+    3) (future) after analysis is complete and user returns to view results 
     """    
     # handle api errors
     if (request.get_vars.error):
@@ -52,33 +55,26 @@ def handle_redirect_uri():
         # get the project num and access string of pre-selected Project
         ssn_ref = app_ssn.References[0]
         if (ssn_ref.Type != 'Project'):
-            return dict(err_msg="Error - unrecognized reference type " + ssn_ref.Type + ". ")
-        else:            
-            ref_content = ssn_ref.Content
-            project_num = ref_content.Id
-            #session.login_scope = ref_content.getAccessStr(scope='read')
-            
-            # add ability to create project for writeback if needed
-            #session.login_scope += ', create projects'                                
-            
-            # create app_session in db
-            app_session_id = db.app_session.insert(app_session_num=session.app_session_num,
-                project_num=project_num,
-                date_created=app_ssn.DateCreated,
-                status="newly created",
-                message="newly launched App Session - no analysis performed yet")
-            
-            # log user into PicardSpace (user should already be logged into BaseSpace)            
-            session.oauth_return_url = URL('user_now_logged_in')            
-            redirect( URL('user', args=['login']) )
+            return dict(err_msg="Error - unrecognized reference type " + ssn_ref.Type + ". ")                
+        ref_content = ssn_ref.Content
+        project_num = ref_content.Id                        
+        
+        # create app_session in db
+        db.app_session.insert(app_session_num=session.app_session_num,
+            project_num=project_num,
+            date_created=app_ssn.DateCreated,
+            status="newly created",
+            message="newly launched App Session - no analysis performed yet")
+        
+        # log user into PicardSpace (user should already be logged into BaseSpace)            
+        session.oauth_return_url = URL('user_now_logged_in')            
+        redirect( URL('user', args=['login']) )
                                                                                                                                                                                                                                                                                                                                                                                               
 
     # handle OAuth2 response - exchange authorization code for auth token
-    if (request.get_vars.code):
-        
+    if (request.get_vars.code):        
         # complete login, if login is in progress
         if session.in_login:
-            #redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code, next=URL('user_now_logged_in'))))
             redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code)))
 
         # ensure user is logged in
@@ -121,13 +117,10 @@ def index():
     """
     response.title = "PicardSpace"
     response.subtitle = "Home Page"
-
-    # clear existing session vars 
-    clear_session_vars()
-    
     main_msg = 'Welcome to PicardSpace'
     scnd_msg = ''
-    err_msg  = ''
+    err_msg  = ''    
+    clear_session_vars()
            
     # if a user is already logged into PicardSpace, redirect to logged-in screen
     if auth.user_id:
@@ -155,17 +148,12 @@ def user_now_logged_in():
         # an app session num was provided, update app session with user info
         ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
         ssn_row.update_record(user_id=auth.user_id)
-
-        # if just logged into session, record access token (needed since web2py will only record token on very first login)        
-        #if session.token:
-        #    user_row = db(db.auth_user.id==auth.user_id).select().first()
-        #    user_row.update_record(access_token=session.token)
-        #    session.token = None
         
-        # start oauth to get browse access to launch Project and to create new Projects for writeback
+        # start oauth, with permission to Read the launch Project and create new Projects, if needed, for writeback
+        # (using Read Project instead of Browse due to bug in Browsing File metadata)
+        # (using Browse Global to browse Samples from input AppResult that are in different Projects)        
         session.oauth_return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
-        redirect(URL('get_auth_code', vars=dict(scope='create projects, browse project ' + str(ssn_row.project_num))))
-        #redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
+        redirect(URL('get_auth_code', vars=dict(scope='create projects, browse global, read project ' + str(ssn_row.project_num))))        
 
 
 @auth.requires_login()
@@ -199,7 +187,6 @@ def choose_analysis_app_result():
     ar_info = []    
     try:      
         # app_result list is in condensed API form - no References, Genome -- get these below                        
-        #app_results = proj.getAppResults(bs_api, myQp={'Limit':ar_limit,'Offset':ar_offset})
         app_results = proj.getAppResults(bs_api, myQp={'Limit':1024})
         ar_tot = len(app_results)
 
@@ -212,16 +199,14 @@ def choose_analysis_app_result():
             ar_short = app_results[n]
             
             # get full-form app_result from API to get Sample name (from relationship to AppResult)            
-            ar = bs_api.getAppResultById(ar_short.Id)
-            
+            ar = bs_api.getAppResultById(ar_short.Id)            
             # get Samples - this method calls API once for each Sample
             samples = ar.getReferencedSamples(bs_api)
 
             # build string of Sample names for display            
             samples_names = []
             for s in samples:
-                samples_names.append(s.Name)
-          
+                samples_names.append(s.Name)          
             ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
                               "app_result_num" : ar.Id } )                                                  
     except Exception as e:
@@ -413,6 +398,7 @@ def get_auth_code():
             "You are being redirected to the <a href='" + redirect_url + "'> BaseSpace api server</a>",
             Location=redirect_url)  
 
+
 @auth.requires_login()
 def start_analysis():
     """
@@ -427,8 +413,7 @@ def start_analysis():
     ar_name = request.vars['ar_name']
     wb_proj_num = request.vars['wb_proj_num']
     ar_num = request.vars['ar_num']
-    file_num = request.vars['file_num']
-    
+    file_num = request.vars['file_num']    
         
     # get input app result and sample objs from Basespace
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
@@ -493,7 +478,7 @@ def start_analysis():
     app_ssn_row.update_record(status="beginning analysis", message="input file added to download queue")
     db.commit()    
             
-    # clear session vars - everything should be in db
+    # everything should now be in db
     clear_session_vars()
 
     # redirect user to view_results page -- with message that their analysis started

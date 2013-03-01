@@ -95,11 +95,12 @@ class BaseSpaceAccount(object):
     and if not then login_url() is called to log the user into BaseSpace via Oauth2.
     
     During Oauth2, an auth code if first requested, which returns control to BaseSpace. 
-    BaseSpace redirects to the redirect_uri, which is handled by a controller method, 
+    BaseSpace redirects to the controller method handle_redirect_uri(), 
     which in turn calls login() again to return here, where the auth code is traded for an access token (in get_user()).
     
-    Web2py login only records in the db the first access token ever encountered for a user (in addition to user name, email, and BaseSpace id). 
-    Tokens that acquired outside of login, e.g. to browse a Project, are written to the user table directly and overwrite the previous token.
+    Web2py login records in the db only the first access token ever encountered for a user (in addition to user name, email, and BaseSpace id). 
+    Tokens that acquired outside of login, e.g. to browse a Project, are acquired by a separate non-login oauth2 
+    and are written to the user table directly in controller methods, which overwrite the previous token.
     
     Login() is called by the following cases:
     1. User launches from BaseSpace
@@ -113,9 +114,7 @@ class BaseSpaceAccount(object):
 
         self.globals = globals()
         self.client_id = app.client_id
-        self.client_secret = app.client_secret
-        #self.request = self.globals['request']
-        #self.session = self.globals['session']
+        self.client_secret = app.client_secret        
         self.auth_url = app.auth_url
         self.token_url = app.token_url
         self.args = None
@@ -133,24 +132,22 @@ class BaseSpaceAccount(object):
             return dict(first_name = user_row.first_name,
                         email = user_row.email,
                         username = user_row.username,
-                        access_token = user_row.access_token)
-                    
+                        access_token = user_row.access_token)                    
         # if we have a new token, get current user info
         if session.token:
-            token = session.token
             
             # clear new token
-            session.token = None
-            
+            token = session.token
+            session.token = None            
             app_ssn_num = ""
             app = db(db.app_data.id > 0).select().first()
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, token)
         
             user = None
-            #try:
-            user = bs_api.getUserById("current")
-            #except:
-                # TODO how to handle this error? need to handle here since get_user isn't wrapped with try except in web2py login(); redirect to error page? can't just return None since this will end in redirect loop (endless login attempts)
+            try:
+                bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, app_ssn_num, token)
+                user = bs_api.getUserById("current")
+            except:
+                raise HTTP(500, "Error when retrieving User information from BaseSpace", Location="None")                
         
             if user:
                 return dict(first_name = user.Name,
@@ -183,7 +180,6 @@ class BaseSpaceAccount(object):
         
         # handle errors from BaseSpace during login        
         if request.vars.error:
-            # TODO is this the best way to handle this error?
             raise HTTP(200, "Permission to access BaseSpace data was rejected by the user", Location=None)
                 
         # just received auth code from BaseSpace, trade it for an access token
@@ -197,7 +193,6 @@ class BaseSpaceAccount(object):
         session.in_login = True
 
         # redirect to BaseSpace to get auth code -- will return to redirect_uri
-        # TODO how to handle exception here?                                                
         auth_request_url = get_auth_code_util(scope="")
         raise HTTP(
             307, 
@@ -207,14 +202,16 @@ class BaseSpaceAccount(object):
 
     def login_url(self, next="/"):
         """
-        If a user isn't logged in yet (get_user() returned None), then this is the entry point for Oauth2. 
+        If a user isn't logged (get_user() returned None), then this is the entry point for login Oauth2. 
         This includes calls from '@requires_login' method decorators when a user isn't logged in.
         """            
         self.__oauth_login()
         return next
 
+
     def logout_url(self, next="/"):
         """
+        Called when user logs out
         """
         session.token = None
         session.auth = None
@@ -258,18 +255,8 @@ db.define_table('output_app_result',    # newly created AppResult for PicardSpac
     Field('sample_num'),                # the Sample that has a relationship to this AppResult, if any
     Field('input_file_id'), db.input_file) # the File that was used as an input to this AppResult, if any (BAM for picardSpace)   
 
-
 db.define_table('output_file',
     Field('app_result_id', db.output_app_result), # the AppResult that contains this File in BaseSpace
     Field('file_num'),
     Field('file_name'),
     Field('local_path'))
-
-#db.define_table('download_queue',
-#    Field('status'),
-#    Field('input_file_id', db.input_file))
-#        
-#db.define_table('analysis_queue',
-#    Field('status'),
-#    Field('message'),
-#    Field('input_file_id', db.input_file))
