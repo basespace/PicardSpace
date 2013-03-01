@@ -11,7 +11,7 @@
 <!--{{=TABLE(*[TR(*rows) for rows in app_ssns])}}-->
 <table class="table table-bordered table-hover">
 
-{{=TR(TH('AppResult'), TH('Output Project'), TH('Date Created'), TH('Status'), TH('Notes'))}}
+{{=TR(TH('AppResult'), TH('Output Project'), TH('Launch Date'), TH('Status'), TH('Notes'))}}
 
 {{for i in app_ssns:}}
 
@@ -20,7 +20,15 @@
 {{if i['status'] == 'complete': cls='success'}}
 {{if i['status'] == 'aborted': cls='error'}}
 
-{{=TR(TD(A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id'], 'ar_back': ar_back} ))), TD(i['project_name']), TD(i['date_created']), TD(i['status']), TD(i['notes']), _class=cls)
+<!-- build link for AppResult data, if any -->
+{{if i['app_result_name']:}}
+  {{rurl = A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id'], 'ar_back': ar_back} ))}}
+{{else:}}
+  {{rurl = 'None'}}
+{{pass}}
+
+<!-- populate table with data -->
+{{=TR(TD(rurl), TD(i['project_name']), TD(i['date_created']), TD(i['status']), TD(i['notes']), _class=cls)
 }}
 
 {{pass}}

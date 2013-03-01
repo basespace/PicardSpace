@@ -535,12 +535,11 @@ def view_results():
             try:
                 proj = bs_api.getProjectById(rslt_row.project_num)
             except Exception as e:                 
-                return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))
-                                
+                return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))                                
 
             app_ssns.append( { 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
         else:                 
-            app_ssns.append( { 'app_result_name':'none', 'project_name':'none', 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
+            app_ssns.append( { 'app_result_name':'', 'project_name':'None', 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
                 
     # calculate next and prev start/end                                                                                                                                        
     next_offset = ar_end
