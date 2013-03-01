@@ -5,6 +5,7 @@ from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import re
 from picardSpace import File, AnalysisInputFile, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 import shutil
+from gluon import HTTP
 
 # Auth notes:
 # 1. All '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called (and _next=controller_method)
@@ -397,17 +398,20 @@ def create_writeback_project():
 @auth.requires_login()
 def get_auth_code():
     """
-    Begin Oauth process to get write access to writeback project
+    Begin Oauth process by getting an authentication code for a given scope
     """         
     if ('scope' not in request.vars):
         return dict(err_msg="We have a problem - expected scope but didn't receive it")
     scope = request.vars['scope']
-    
+        
     try:
-        get_auth_code_util(scope)
+        redirect_url = get_auth_code_util(scope)        
     except Exception as e:
-        return dict(err_msg=str(e))            
-
+        return dict(err_msg=str(e))                
+    raise HTTP(
+            307, 
+            "You are being redirected to the <a href='" + redirect_url + "'> BaseSpace api server</a>",
+            Location=redirect_url)  
 
 @auth.requires_login()
 def start_analysis():

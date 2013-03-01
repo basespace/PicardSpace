@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 db = DAL('sqlite://storage.sqlite')
-from gluon import current
+from gluon import current, HTTP
 current.db = db
 
 # only use secure cookies (cookie only sent over https), except when using localhost
@@ -184,7 +184,6 @@ class BaseSpaceAccount(object):
         # handle errors from BaseSpace during login        
         if request.vars.error:
             # TODO is this the best way to handle this error?
-            HTTP = self.globals['HTTP']            
             raise HTTP(200, "Permission to access BaseSpace data was rejected by the user", Location=None)
                 
         # just received auth code from BaseSpace, trade it for an access token
@@ -199,18 +198,20 @@ class BaseSpaceAccount(object):
 
         # redirect to BaseSpace to get auth code -- will return to redirect_uri
         # TODO how to handle exception here?                                                
-        # TODO the below method should return a url, then redirect here -- too confusing to follow otherwise
-        get_auth_code_util(scope="")                                  
+        auth_request_url = get_auth_code_util(scope="")
+        raise HTTP(
+            307, 
+            "You are not authenticated: you are being redirected to the <a href='" + auth_request_url + "'> authentication server</a>",
+            Location=auth_request_url)                              
 
 
     def login_url(self, next="/"):
         """
         If a user isn't logged in yet (get_user() returned None), then this is the entry point for Oauth2. 
-        This is includes call from '@requires_login' method decorators when a user isn't logged in.
+        This includes calls from '@requires_login' method decorators when a user isn't logged in.
         """            
         self.__oauth_login()
-        #return next
-        return
+        return next
 
     def logout_url(self, next="/"):
         """

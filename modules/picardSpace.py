@@ -277,15 +277,15 @@ def readable_bytes(size,precision=2):
 
 def get_auth_code_util(scope):
     """
-    Initiate OAuth2 to get auth code for the given scope
+    Initiate OAuth2 to get auth code for the given scope, returns url to redirect to so user can confirm scope via oauth2 dialog
     """
     if not scope:
         scope = ""
     app = current.db(current.db.app_data.id > 0).select().first()
     bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, current.session.app_session_num)
     
-    userUrl = bs_api.getWebVerificationCode(scope,app.redirect_uri)
-    redirect(userUrl)
+    url = bs_api.getWebVerificationCode(scope,app.redirect_uri)
+    return url
 
         
 def get_access_token_util(auth_code):
