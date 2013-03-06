@@ -2,6 +2,9 @@
 
 db = DAL('sqlite://storage.sqlite')
 from gluon import current, HTTP
+from gluon.tools import Auth
+from urlparse import urlparse
+from picardSpace import get_auth_code_util, get_access_token_util
 current.db = db
 
 # only use secure cookies (cookie only sent over https), except when using localhost
@@ -16,7 +19,6 @@ session.connect(request, response, db)
 response.generic_patterns = ['*'] if request.is_local else []
 
 # define authentication table and setting
-from gluon.tools import Auth
 auth = Auth(db)
 
 auth_table = db.define_table(
@@ -45,7 +47,6 @@ auth.settings.actions_disabled.append('groups')
 
 # set page that user sees after logging in, out
 auth.settings.login_next = URL('user_now_logged_in')
-auth.settings.logout_next = 'http://basespace.illumina.com'
 
 ## configure auth policy
 auth.settings.registration_requires_verification = False
@@ -83,10 +84,16 @@ app_data = db(db.app_data.id > 0).select().first()
 if not app_data:
     app_data = db.app_data.insert()
 
+# generate link to BaseSpace server
+p_url = urlparse(app_data.auth_url)
+baseSpace_link = p_url.scheme + "://" + p_url.netloc
+del app_data, p_url
+
+# set logout location to BaseSpace server
+auth.settings.logout_next = baseSpace_link
+
 
 # define class for web2py login with BaseSpace credentials 
-from picardSpace import get_auth_code_util, get_access_token_util
-
 class BaseSpaceAccount(object):
     """
     OAuth2 implementation for BaseSpace
