@@ -470,12 +470,15 @@ def start_analysis():
     db.commit()
 
     # add BAM File to download queue
-    q.enqueue_call(func=download_bs_file, 
-                   args=(input_file_id,),
-                   timeout=86400) # seconds
+    #q.enqueue_call(func=download_bs_file, 
+    #               args=(input_file_id,),
+    #               timeout=86400) # seconds
+    scheduler.queue_task(download_bs_file, 
+                         pvars = {'input_file_id':input_file_id}, 
+                         timeout = 86400) # seconds
     
     # update AppSession status
-    app_ssn_row.update_record(status="beginning analysis", message="input file added to download queue")
+    app_ssn_row.update_record(status="queued for download", message="input file added to download queue")
     db.commit()    
             
     # everything should now be in db

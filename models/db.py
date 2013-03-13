@@ -3,9 +3,14 @@
 db = DAL('sqlite://storage.sqlite')
 from gluon import current, HTTP
 from gluon.tools import Auth
+from gluon.scheduler import Scheduler
 from urlparse import urlparse
-from picardSpace import get_auth_code_util, get_access_token_util
+from picardSpace import get_auth_code_util, get_access_token_util, download_bs_file, analyze_bs_file
 current.db = db
+
+# instantiate web2py Scheduler
+scheduler = Scheduler(db, heartbeat=1) # override heartbeat to check for tasks every 1 sec (instead of 3 secs)
+current.scheduler = scheduler
 
 # only use secure cookies (cookie only sent over https), except when using localhost
 if not request.is_local:

@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 # coding: utf8
 from gluon import *
-
 import os.path
 from subprocess import Popen, PIPE
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import shutil
-
 
 
 class File(object):
@@ -39,7 +37,7 @@ class File(object):
             os.makedirs(local_dir)
 
         # write downloaded data to new file
-        f.downloadFile(bs_api,local_dir)
+        f.downloadFile(bs_api,local_dir)                        
         return(os.path.join(local_dir, f.Name))
         
     
@@ -68,7 +66,7 @@ class AnalysisInputFile(File):
         try:
             local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
         except Exception as e:
-            print "Error: {0}".format(str(e)) # won't reach user
+            print "Error downloading file from BaseSpace: {0}".format(str(e)) # won't reach user
 
             # update download queue and AppSession status in db            
             ssn_row.update_record(status='aborted', message=str(e))
@@ -80,9 +78,12 @@ class AnalysisInputFile(File):
             db.commit()               
         
             # add file to analysis queue                        
-            q.enqueue_call(func=analyze_bs_file, 
-                   args=(self.bs_file_id,),
-                   timeout=86400) # seconds
+            #q.enqueue_call(func=analyze_bs_file, 
+            #       args=(self.bs_file_id,),
+            #       timeout=86400) # seconds
+            current.scheduler.queue_task(analyze_bs_file, 
+                                 pvars = {'input_file_id':self.bs_file_id}, 
+                                 timeout = 86400) # seconds
 
             # update app_session status to 'download complete, in analysis queue'
             ssn_row.update_record(status="queued for analysis", message="download complete")
@@ -112,16 +113,18 @@ class AppResult(object):
                 
         # run picard                        
         if self._run_picard(input_file):
-            message = 'analysis successful'
+            message = 'analysis successful; results not yet written back to BaseSpace'
             analysis_success = True            
         else:
-            message = 'analysis failed - see stderr.txt'
+            message = 'analysis failed - see stderr.txt; results not yet written back to BaseSpace'
             analysis_success = False        
         self.update_status("writing back", message)
        
-        # writeback output files        
-        self._writeback_app_result_files()        
-        message += "; write-back successful"
+        # writeback output files            
+        self._writeback_app_result_files()
+        message = "analysis and write-back successful"
+        if not analysis_success:        
+            message = "analysis failed - see stderr.txt; writeback successful"        
         self.update_status('deleting local files', message)
                 
         # delete local files                        
@@ -129,9 +132,8 @@ class AppResult(object):
         message += "; deleted local files"
 
         # update session status
-        if analysis_success:
-            status = 'complete'
-        else:
+        status = 'complete'
+        if not analysis_success:                    
             status = 'aborted'        
         self.update_status(status, message, status)
             
@@ -334,6 +336,11 @@ def download_bs_file(input_file_id):
         # update AppSession status in db        
         ssn_row.update_record(status='aborted', message=str(e))            
         db.commit()
+        # raise exception so queue will record exception and mark job as failed
+        raise
+    
+    # sanity commit to db for web2py Scheduler
+    db.commit()
 
 
 def analyze_bs_file(input_file_id):
@@ -383,5 +390,8 @@ def analyze_bs_file(input_file_id):
         except Exception as e:
             # print err msg,  but not in db (user won't see it)
             print "Error updating AppSession status: {0} - {1}".format(str(e), e.message) 
-            
+        # raise exception so queue will record exception and mark job as failed
+        raise    
+    # sanity commit to db for web2py Scheduler
+    db.commit()
 
