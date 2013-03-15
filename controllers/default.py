@@ -335,7 +335,7 @@ def confirm_analysis_inputs():
 
     # add writeback message if writing to PicardSpace Results project
     writeback_msg = ""
-    if project.Name == 'PicardSpace Results':
+    if proj_name == 'PicardSpace Results':
         writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
             
     return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg="")        
