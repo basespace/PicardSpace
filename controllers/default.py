@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os.path
-from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI, BillingAPI
+from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
+from BaseSpacePy.api.BillingAPI import BillingAPI
 import re
 from picardSpace import File, AnalysisInputFile, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 import shutil

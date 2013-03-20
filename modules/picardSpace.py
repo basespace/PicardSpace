@@ -50,7 +50,7 @@ class AnalysisInputFile(File):
         Download file contents from BaseSpace and queue the file for analysis
         """           
         db = current.db  
-        q = current.q
+        
         # get input file and output app result info from database        
         ar_row = db(db.output_app_result.input_file_id==self.bs_file_id).select().first()
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
