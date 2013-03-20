@@ -80,8 +80,7 @@ db.define_table('app_data',
     Field('auth_url', default='https://cloud-hoth.illumina.com/oauth/authorize'),                 # portal hoth
     Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),      # portal hoth    
     Field('redirect_uri', default=''),
-    Field('redis_host', default='localhost'),
-    Field('redis_port', default=6379),
+    Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
     Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
 
 # create an instance of app_data table if not present
@@ -272,3 +271,7 @@ db.define_table('output_file',
     Field('file_num'),
     Field('file_name'),
     Field('local_path'))
+
+db.define_table('product',               # products for billing, corresponding to manually created products in BaseSpace dev portal
+    Field('name'),
+    Field('num'))

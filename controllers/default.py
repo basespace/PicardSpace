@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os.path
-from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
+from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI, BillingAPI
 import re
 from picardSpace import File, AnalysisInputFile, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 import shutil
@@ -17,9 +17,10 @@ def clear_session_vars():
     Clear all session variables
     """
     session.app_session_num = None         # contains app sesssion num that user launched with from BaseSpace
-    session.oauth_return_url = None        # the url to return to when oauth is complete 
+    session.return_url = None              # the url to return to when oauth or billing is complete 
     session.in_login = False               # flag to handle_redirect_uri() to determine if in login or non-login oauth
-    session.token = None                   # temporarily holds access token from login oauth
+    session.token = None                   # temporarily holds access token from login oauth    
+    session.paid = False                   # flag to record that user has paid for analysis
 
 
 def handle_redirect_uri():
@@ -67,7 +68,7 @@ def handle_redirect_uri():
             message="newly launched App Session - no analysis performed yet")
         
         # log user into PicardSpace (user should already be logged into BaseSpace)            
-        session.oauth_return_url = URL('user_now_logged_in')            
+        session.return_url = URL('user_now_logged_in')            
         redirect( URL('user', args=['login']) )
                                                                                                                                                                                                                                                                                                                                                                                               
 
@@ -105,7 +106,7 @@ def handle_redirect_uri():
         db.commit()
             
         # go to url specified by original call to get token
-        redirect(session.oauth_return_url)            
+        redirect(session.return_url)            
 
     # shouldn't reach this point - redirect to index page
     redirect(URL('index'))     
@@ -152,7 +153,7 @@ def user_now_logged_in():
         # start oauth, with permission to Read the launch Project and create new Projects, if needed, for writeback
         # (using Read Project instead of Browse due to bug in Browsing File metadata)
         # (using Browse Global to browse Samples from input AppResult that are in different Projects)        
-        session.oauth_return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
+        session.return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
         redirect(URL('get_auth_code', vars=dict(scope='create projects, browse global, read project ' + str(ssn_row.project_num))))        
 
 
@@ -279,7 +280,6 @@ def choose_analysis_file():
 
 
 @auth.requires_login()
-#def choose_writeback_project():
 def confirm_analysis_inputs():
     """
     Presents final confirmation to user before launching analysis.
@@ -337,8 +337,81 @@ def confirm_analysis_inputs():
     writeback_msg = ""
     if proj_name == 'PicardSpace Results':
         writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
-            
+        
     return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg="")        
+
+
+@auth.requires_login()
+def start_billing():
+    """
+    Records parameters to launch analysis and initiates billing process
+    """
+    if ('ar_name' not in request.vars or
+        'ar_num' not in request.vars or
+        'file_num' not in request.vars):        
+        return dict(err_msg="We have a problem - expected query variables but didn't receive them")
+    ar_name = request.vars['ar_name']
+    ar_num = request.vars['ar_num']
+    file_num = request.vars['file_num']
+    # TODO check that this product hasn't already been purchased for this session? prevent double purchases
+
+    # get store API
+    user_row = db(db.auth_user.id==auth.user_id).select().first()    
+    app = db(db.app_data.id > 0).select().first()            
+    try:
+        store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)            
+    except Exception as e:
+        return dict(err_msg=str(e))
+    
+    # calculate how much to charge
+    try:
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)                
+        input_file = bs_api.getFileById(file_num)
+    except Exception as e:
+        return dict(err_msg=str(e))
+
+    if input_file.Size < 100000000: # <100 MB
+        prod_quant = 1
+    if input_file.Size < 1000000000: # <1 GB
+        prod_quant = 5
+    else:                           # >1 GB
+        prod_quant = 10       
+    
+    # get product
+    prod_name = 'AlignmentQC'
+    prod_row = db(db.product.name==prod_name).select().first()
+    if not prod_row:
+        return dict(err_msg="Error - product '" + prod_name + "' doesn't seem to exist the database")
+    prod_id = prod_row.num
+
+    # construct url for BaseSpace store to return to after purchase
+    if (request.is_local):        
+        return_url = URL('handle_billing_redirect_uri', scheme=True, host=True, port=8000)
+    else:
+        return_url = URL('handle_billing_redirect_uri', scheme=True, host=True)
+    
+    # make the purchase, capture url for user to view BaseSpace billing dialog
+    try:
+        purchase = store_api.createPurchase({'id':prod_id, 'quantity':prod_quant})
+    except Exception as e:
+        return dict(err_msg=str(e))    
+    
+    if not purchase.HrefPurchaseDialog:
+        return dict(err_msg="There was a problem getting billing information from BaseSpace")
+    redirect_url = purchase.HrefPurchaseDialog + "?returnurl=" + return_url
+    
+    session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
+    redirect(redirect_url)
+    
+
+@auth.requires_login()
+def handle_billing_redirect_uri():
+    """
+    After billing is successful, this method handles the return to proceed with beginning analysis
+    """
+    session.paid = True
+    # TODO check that session.bill_oauth_url is set
+    redirect(session.return_url)
 
 
 @auth.requires_login()
@@ -376,7 +449,7 @@ def create_writeback_project():
         wb_proj_num = wb_proj.Id
 
     # start oauth to get write project access, then start analysis
-    session.oauth_return_url = URL('start_analysis', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num, wb_proj_num=wb_proj_num))
+    session.return_url = URL('start_analysis', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num, wb_proj_num=wb_proj_num))
     redirect(URL('get_auth_code', vars=dict(scope='write project ' + str(wb_proj_num))))    
 
 
@@ -414,6 +487,10 @@ def start_analysis():
     wb_proj_num = request.vars['wb_proj_num']
     ar_num = request.vars['ar_num']
     file_num = request.vars['file_num']    
+
+    # make sure we gots green
+    if not session.paid:
+        return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
         
     # get input app result and sample objs from Basespace
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
