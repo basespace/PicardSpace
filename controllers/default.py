@@ -414,7 +414,7 @@ def handle_billing_redirect_uri():
     After billing is successful, this method handles the return to proceed with beginning analysis
     """
     session.paid = True
-    # TODO check that session.bill_oauth_url is set
+    # TODO check that session.return_url is set
     redirect(session.return_url)
 
 
