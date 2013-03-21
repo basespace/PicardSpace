@@ -4,7 +4,7 @@ import os.path
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
 import re
-from picardSpace import File, AnalysisInputFile, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
+from picardSpace import File, AnalysisInputFile, ProductPurchase, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 import shutil
 from gluon import HTTP
 
@@ -265,18 +265,15 @@ def choose_analysis_file():
     file_info = []    
     for f in bs_files:      
         
-        # don't allow analysis of files > 100 MB
+        # don't allow analysis of files > 1 GB
         large_file = ""
-        if (f.Size > 100000000):     
-            large_file = "large_file"
-            
+        if (f.Size > 1000000000):     
+            large_file = "large_file"            
         file_info.append( { "file_name" : f.Name + " (" + readable_bytes(f.Size) + ")",
                             "file_num" : f.Id,
-                            #"app_result_num" : app_result.Id,
                             "large_file" : large_file } )                      
     
-    app_result_name=app_result.Name + " - " + ', '.join(samples_names)
-    
+    app_result_name=app_result.Name + " - " + ', '.join(samples_names)    
     return dict(app_result_name=app_result_name, file_info=file_info, file_back=file_back, ar_num=ar_num, ar_back=ar_back, err_msg="")
 
 
@@ -291,7 +288,7 @@ def confirm_analysis_inputs():
     if ('file_num' not in request.vars or
         'ar_num' not in request.vars or
         'file_back' not in request.vars):
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num="", file_num="", file_back="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num="", file_num="", file_back="", price="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")
     
     file_num = request.vars['file_num']
     ar_num = request.vars['ar_num']
@@ -310,7 +307,15 @@ def confirm_analysis_inputs():
         app_result = bs_api.getAppResultById(ar_num)
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg=str(e))        
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg=str(e))        
+    
+    # calculate how much to charge        
+    prod_purch = ProductPurchase('AlignmentQC')
+    try:
+        prod_purch.calc_price(file_num, user_row.access_token)
+    except Exception as e:
+        return dict(err_msg="Error calculating product price: " + str(e))        
+    price = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
     
     # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
     sample_name = "unknown"
@@ -319,7 +324,7 @@ def confirm_analysis_inputs():
         try:
             sample = bs_api.getSampleById(sample_num)
         except Exception as e:  
-            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg=str(e))        
+            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price=price, err_msg=str(e))        
              
         sample_name = sample.Name               
 
@@ -329,7 +334,7 @@ def confirm_analysis_inputs():
         try:
             project = bs_api.getProjectById(ssn_row.project_num)
         except Exception as e:          
-            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg=str(e))        
+            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price=price, err_msg=str(e))        
         proj_name = project.Name
     else:
         proj_name = 'PicardSpace Results'
@@ -339,7 +344,7 @@ def confirm_analysis_inputs():
     if proj_name == 'PicardSpace Results':
         writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
         
-    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, file_back=file_back, err_msg="")        
+    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, file_back=file_back, price=price, err_msg="")        
 
 
 @auth.requires_login()
@@ -364,25 +369,12 @@ def start_billing():
     except Exception as e:
         return dict(err_msg=str(e))
     
-    # calculate how much to charge
+    # calculate how much to charge        
+    prod_purch = ProductPurchase('AlignmentQC')
     try:
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)                
-        input_file = bs_api.getFileById(file_num)
+        prod_purch.calc_price(file_num, user_row.access_token)
     except Exception as e:
-        return dict(err_msg=str(e))
-
-    if input_file.Size < 100000000: # <100 MB
-        prod_quant = 1
-    if input_file.Size < 1000000000: # <1 GB
-        prod_quant = 5
-    else:                           # >1 GB
-        prod_quant = 10       
-    
-    # get product
-    prod_name = 'AlignmentQC'
-    prod_row = db(db.product.name==prod_name).select().first()
-    if not prod_row:
-        return dict(err_msg="Error - product '" + prod_name + "' doesn't seem to exist the database")
+        return dict(err_msg="Error calculating product price: " + str(e))        
 
     # construct url for BaseSpace store to return to after purchase
     if (request.is_local):        
@@ -392,7 +384,7 @@ def start_billing():
     
     # make the purchase, capture url for user to view BaseSpace billing dialog
     try:
-        purchase = store_api.createPurchase({'id':prod_row.num, 'quantity':prod_quant})
+        purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
     except Exception as e:
         return dict(err_msg=str(e))    
     
@@ -408,8 +400,8 @@ def start_billing():
                                      amount_of_tax=purchase.AmountOfTax,    
                                      amount_total=purchase.AmountTotal)    
     db.purchased_product.insert(purchase_id=purchase_id,
-                               product_id=prod_row.id,
-                               quantity=prod_quant)                    
+                               product_id=prod_purch.prod_id,
+                               quantity=prod_purch.prod_quantity)                    
     db.commit()
         
     session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))

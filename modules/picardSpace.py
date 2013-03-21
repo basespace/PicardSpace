@@ -264,6 +264,45 @@ class AppResult(object):
             db.commit()
 
 
+class ProductPurchase(object):
+    """
+    A product that a user may purchase
+    """
+    def __init__(self, prod_name):
+        """
+        Initialize product with price and num from db
+        """              
+        db=current.db        
+        prod_row = db(db.product.name==prod_name).select().first()
+        self.prod_name=prod_name
+        self.prod_id=prod_row.id
+        self.prod_price=prod_row.price
+        self.prod_num=prod_row.num
+        self.file_num=None
+        self.amount=None
+        self.prod_quantity=None
+
+    def calc_price(self, file_num, access_token):
+        """
+        Calculates quantity of product needed to purchase from analyzing the provided file
+        """
+        self.file_num=file_num
+        if(self.prod_name is 'AlignmentQC'):
+            db=current.db     
+                
+            app = db(db.app_data.id > 0).select().first()                
+                    
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, "", access_token)                
+            input_file = bs_api.getFileById(file_num)    
+        
+            if input_file.Size < 100000000: # <100 MB
+                self.prod_quantity = 1
+            if input_file.Size < 1000000000: # <1 GB
+                self.prod_quantity = 5
+            else:                           # >1 GB
+                self.prod_quantity = 10       
+
+
 
 def readable_bytes(size,precision=2):
     """
@@ -395,3 +434,5 @@ def analyze_bs_file(input_file_id):
     # sanity commit to db for web2py Scheduler
     db.commit()
 
+
+ 

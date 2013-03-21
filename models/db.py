@@ -239,6 +239,7 @@ auth.settings.login_form=BaseSpaceAccount()
 # define db tables
 db.define_table('app_session',
     Field('app_session_num'),
+    Field('name'),
     Field('project_num'),               # the BaseSpace project that the app was launched with (redundant with input_app_result project)
     Field('user_id'), db.auth_user,
     Field('date_created'),
@@ -274,7 +275,8 @@ db.define_table('output_file',
 
 db.define_table('product',              # products for billing, corresponding to manually created products in BaseSpace dev portal
     Field('name'),
-    Field('num'))
+    Field('num'),
+    Field('price'))
 
 db.define_table('purchase',             # purchase made by user
     Field('app_session_id', db.app_session),
