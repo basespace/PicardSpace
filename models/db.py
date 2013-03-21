@@ -272,6 +272,19 @@ db.define_table('output_file',
     Field('file_name'),
     Field('local_path'))
 
-db.define_table('product',               # products for billing, corresponding to manually created products in BaseSpace dev portal
+db.define_table('product',              # products for billing, corresponding to manually created products in BaseSpace dev portal
     Field('name'),
     Field('num'))
+
+db.define_table('purchase',             # purchase made by user
+    Field('app_session_id', db.app_session),
+    Field('date_created'),
+    Field('amount'),
+    Field('amount_of_tax'),
+    Field('amount_total'))
+    
+db.define_table('purchased_product',    # product(s) that were bought in a user purchase 
+    Field('purchase_id', db.purchase),
+    Field('product_id', db.product),
+    Field('quantity'))                    
+    

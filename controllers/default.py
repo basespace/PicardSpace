@@ -383,7 +383,6 @@ def start_billing():
     prod_row = db(db.product.name==prod_name).select().first()
     if not prod_row:
         return dict(err_msg="Error - product '" + prod_name + "' doesn't seem to exist the database")
-    prod_id = prod_row.num
 
     # construct url for BaseSpace store to return to after purchase
     if (request.is_local):        
@@ -393,14 +392,26 @@ def start_billing():
     
     # make the purchase, capture url for user to view BaseSpace billing dialog
     try:
-        purchase = store_api.createPurchase({'id':prod_id, 'quantity':prod_quant})
+        purchase = store_api.createPurchase({'id':prod_row.num, 'quantity':prod_quant})
     except Exception as e:
         return dict(err_msg=str(e))    
     
     if not purchase.HrefPurchaseDialog:
         return dict(err_msg="There was a problem getting billing information from BaseSpace")
-    redirect_url = purchase.HrefPurchaseDialog + "?returnurl=" + return_url
+    redirect_url = purchase.HrefPurchaseDialog + "?returnurl=" + return_url        
     
+    # record purchase in db
+    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()    
+    purchase_id = db.purchase.insert(app_session_id=ssn_row.id,
+                                     date_created=purchase.DateCreated,
+                                     amount=purchase.Amount,
+                                     amount_of_tax=purchase.AmountOfTax,    
+                                     amount_total=purchase.AmountTotal)    
+    db.purchased_product.insert(purchase_id=purchase_id,
+                               product_id=prod_row.id,
+                               quantity=prod_quant)                    
+    db.commit()
+        
     session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
     redirect(redirect_url)
     
@@ -548,9 +559,6 @@ def start_analysis():
     db.commit()
 
     # add BAM File to download queue
-    #q.enqueue_call(func=download_bs_file, 
-    #               args=(input_file_id,),
-    #               timeout=86400) # seconds
     scheduler.queue_task(download_bs_file, 
                          pvars = {'input_file_id':input_file_id}, 
                          timeout = 86400) # seconds
