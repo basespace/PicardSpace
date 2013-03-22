@@ -64,6 +64,7 @@ auth.settings.expiration = 3600  # seconds
 
 # define global vars
 current.aln_metrics_ext = ".AlignmentMetrics.txt"
+current.product_names = {'AlignmentQC':'AlignmentQC'}
 
 # define app data - NOTE if changing any defaults, must manually deleted existing db entry
 db.define_table('app_data',
@@ -230,7 +231,6 @@ class BaseSpaceAccount(object):
 
 # instantiate Oauth2 login form
 auth.settings.login_form=BaseSpaceAccount()
-
 
 # database naming convention:
 # 'id's are local database identifiers

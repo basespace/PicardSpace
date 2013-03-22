@@ -287,7 +287,7 @@ class ProductPurchase(object):
         Calculates quantity of product needed to purchase from analyzing the provided file
         """
         self.file_num=file_num
-        if(self.prod_name is 'AlignmentQC'):
+        if(self.prod_name is current.product_names['AlignmentQC']):
             db=current.db     
                 
             app = db(db.app_data.id > 0).select().first()                

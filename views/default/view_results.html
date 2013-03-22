@@ -11,24 +11,33 @@
 <!--{{=TABLE(*[TR(*rows) for rows in app_ssns])}}-->
 <table class="table table-bordered table-hover">
 
-{{=TR(TH('AppResult'), TH('Output Project'), TH('Launch Date'), TH('Status'), TH('Notes'))}}
+{{=TR(TH('Result'), TH('Output Project'), TH('Launch Date'), TH('Status'), TH('Notes'))}}
 
 {{for i in app_ssns:}}
 
-<!-- set row color based on status -->
-{{cls = 'warning'}}
-{{if i['status'] == 'complete': cls='success'}}
-{{if i['status'] == 'aborted': cls='error'}}
-
 <!-- build link for AppResult data, if any -->
-{{if i['app_result_name']:}}
+{{if i['link_to_results']:}}
   {{rurl = A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id'], 'ar_back': ar_back} ))}}
+  {{proj = i['project_name']}}
+  {{date = i['date_created']}}
+  {{status = i['status']}}
+  {{notes = i['notes']}}
+  
+  <!-- set row color based on status -->
+  {{cls = 'warning'}}
+  {{if status == 'complete': cls='success'}}
+  {{if status == 'aborted': cls='error'}}
 {{else:}}
-  {{rurl = 'None'}}
+  {{rurl = TAG.SMALL(i['app_result_name'])}}
+  {{proj = TAG.SMALL(i['project_name'])}}
+  {{date = TAG.SMALL(i['date_created'])}}
+  {{status = TAG.SMALL(i['status'])}}
+  {{notes = TAG.SMALL(i['notes'])}}
+  {{cls = 'null'}}
 {{pass}}
 
 <!-- populate table with data -->
-{{=TR(TD(rurl), TD(i['project_name']), TD(i['date_created']), TD(i['status']), TD(i['notes']), _class=cls)
+{{=TR(TD(rurl), TD(proj), TD(date), TD(status), TD(notes), _class=cls)
 }}
 
 {{pass}}
