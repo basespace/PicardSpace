@@ -31,9 +31,10 @@ Setup
         python web2py.py -K PicardSpace -X
 
 5. Register your new PicardSpace app on the BaseSpace developer portal (developer.basespace.illumina.com) with these settings:
-App Launch Location: Projects
-Home Page: http://localhost:8000/PicardSpace
-Redirect URI: http://localhost:8000/PicardSpace/default/handle_redirect_uri
+
+- App Launch Location: Projects
+- Home Page: http://localhost:8000/PicardSpace
+- Redirect URI: http://localhost:8000/PicardSpace/default/handle\_redirect\_uri
 
 6. Go to baseSpace.illumina.com and launch your new app from any Project that contains an AppResult with a small BAM file.
 
