@@ -53,7 +53,7 @@ python setup.py install
 sleep 5
 
 echo 'Installing java'
-apt-get --yes install default-jre
+sudo apt-get --yes install default-jre
 
 sleep 5
 
@@ -67,11 +67,24 @@ find /home/www-data -type d -exec chmod 2775 {} +
 find /home/www-data -type f -exec chmod 0664 {} +
 usermod -a -G www-pub www-data
 
-sleep 5
+#sleep 5
+#echo 'Restarting web server'
+#sudo /etc/init.d/apache2 restart
 
-echo 'Restarting web server'
-sudo /etc/init.d/apache2 restart
-
+echo
+echo "Now for the manual steps:"
+echo
+echo "Configure your database. Edit models/db.py and change the database definition to point to your RDS instance, such as:"
+echo "  db = DAL('mysql://username:password@picardspacedb.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com/db_name')"
+echo
+echo "Restart the web server:"
+echo "sudo /etc/init.d/apache2 restart"
+echo
+echo "Add your product information to the 'product' table in the database. Use the web2py admin interface to do this"
+echo
+echo "Restart the web server:"
+echo "sudo /etc/init.d/apache2 restart"
+echo
 echo "That's it!"
 echo "Please logout and re-login so newly added www-pub group will be added to the ubuntu user account"
 
