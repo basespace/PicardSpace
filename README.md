@@ -14,7 +14,7 @@ Setup
         or
         python setup.py install --prefix=/in/your/PYTHONPATH
 
-2. Download and unzip web2py Source Code (download Current version. If on Mac OSX, don't download the pre-built Mac application.
+2. Download and unzip web2py source code. If you're on Mac OSX, don't download the pre-built Mac application.
 
         wget http://www.web2py.com/examples/static/web2py_src.zip
         unzip web2py_src.zip
@@ -25,12 +25,12 @@ Setup
         git clone https://github.com/basespace/PicardSpace.git
 
 
-4. Start web2py (and the web2py Scheduler), first navigating to the main 'web2py' directory. A web browser should launch with address localhost:8000).
+4. Start web2py (and the web2py Scheduler), first navigating to the main 'web2py' directory. A web browser should launch with address localhost:8000.
 
         cd ..
         python web2py.py -K PicardSpace -X
 
-5. Register your new PicardSpace app on the BaseSpace dev portal (developer.basespace.illumina.com) with these settings:
+5. Register your new PicardSpace app on the BaseSpace developer portal (developer.basespace.illumina.com) with these settings:
 App Launch Location: Projects
 Home Page: http://localhost:8000/PicardSpace
 Redirect URI: http://localhost:8000/PicardSpace/default/handle_redirect_uri
