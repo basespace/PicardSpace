@@ -7,10 +7,11 @@ A website that runs Picard tools for BaseSpace.
 Setup
 =====
 1. Download the BaseSpace python SDK
+
         git clone https://github.com/basespace/basespace-python-sdk.git
         cd basespace-python-sdk/src
         sudo python setup.py install
-          or
+        or
         python setup.py install --prefix=/in/your/PYTHONPATH
 
 2. Download and unzip web2py Source Code (download Current version. If on Mac OSX, don't download the pre-built Mac application.
