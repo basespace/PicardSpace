@@ -285,7 +285,8 @@ db.define_table('purchase',             # purchase made by user
     Field('amount'),
     Field('amount_of_tax'),
     Field('amount_total'),
-    Field('status'))
+    Field('status'),
+    Field('invoice_number'))
     
 db.define_table('purchased_product',    # product(s) that were bought in a user purchase 
     Field('purchase_id', db.purchase),

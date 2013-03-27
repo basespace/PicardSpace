@@ -78,16 +78,26 @@ def handle_redirect_uri():
             redirect( URL('user', args=['login']) )
  
         # handle case: just launched from BaseSpace
-        if (request.get_vars.action == 'purchase'):
-            
+        if (request.get_vars.action == 'purchase'):            
             if not request.get_vars.purchaseid:
-                return dict(err_msg="Error: purchase from BaseSpace not accompanied by a Purchase Id")
-            
-            # set purchase status to paid in db
+                return dict(err_msg="Error: purchase from BaseSpace not accompanied by a purchase id")
+
+            # get purchase from db
             p_row = db(db.purchase.purchase_num==request.get_vars.purchaseid).select().first()
             if not p_row:
                 return dict(err_msg="Error: product id not recognized for purchase")
-            p_row.update_record(status='paid')
+            
+            # get invoice number from BaseSpace now that this purchase is complete
+            app = db(db.app_data.id > 0).select().first()
+            user_row = db(db.auth_user.id==auth.user_id).select().first()
+            try:
+                store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)
+                purch = store_api.getPurchaseById(request.get_vars.purchaseid)                        
+            except:
+                return dict(err_msg=str(e))            
+            
+            # record invoice number and set purchase status to paid in db
+            p_row.update_record(status='paid', invoice_number=purch.InvoiceNumber)
             db.commit()            
             redirect(session.return_url)
                                                                                                                                                                                                                                                                                                                                                                                               
@@ -393,22 +403,14 @@ def start_billing():
         prod_purch.calc_price(file_num, user_row.access_token)
     except Exception as e:
         return dict(err_msg="Error calculating product price: " + str(e))        
-
-    # construct url for BaseSpace store to return to after purchase
-    #if (request.is_local):        
-    #    return_url = URL('handle_billing_redirect_uri', scheme=True, host=True, port=8000)
-    #else:
-    #    return_url = URL('handle_billing_redirect_uri', scheme=True, host=True)
     
     # make the purchase, capture url for user to view BaseSpace billing dialog
     try:
         purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
     except Exception as e:
-        return dict(err_msg=str(e))    
-    
+        return dict(err_msg=str(e))        
     if not purchase.HrefPurchaseDialog:
         return dict(err_msg="There was a problem getting billing information from BaseSpace")
-    #redirect_url = purchase.HrefPurchaseDialog + "?returnurl=" + return_url        
     
     # record purchase in db
     ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()    
@@ -425,19 +427,8 @@ def start_billing():
     db.commit()
     session.purchase_id = purchase_id
     session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
-    #redirect(redirect_url)
     redirect(purchase.HrefPurchaseDialog)
     
-
-#@auth.requires_login()
-#def handle_billing_redirect_uri():
-#    """
-#    After billing is successful, this method handles the return to proceed with beginning analysis
-#    """
-#    session.paid = True
-#    # TODO check that session.return_url is set
-#    redirect(session.return_url)
-
 
 @auth.requires_login()
 def create_writeback_project():
