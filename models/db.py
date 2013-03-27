@@ -279,11 +279,13 @@ db.define_table('product',              # products for billing, corresponding to
     Field('price'))
 
 db.define_table('purchase',             # purchase made by user
+    Field('purchase_num'),
     Field('app_session_id', db.app_session),
     Field('date_created'),
     Field('amount'),
     Field('amount_of_tax'),
-    Field('amount_total'))
+    Field('amount_total'),
+    Field('status'))
     
 db.define_table('purchased_product',    # product(s) that were bought in a user purchase 
     Field('purchase_id', db.purchase),

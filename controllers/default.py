@@ -22,6 +22,7 @@ def clear_session_vars():
     session.in_login = False               # flag to handle_redirect_uri() to determine if in login or non-login oauth
     session.token = None                   # temporarily holds access token from login oauth    
     session.paid = False                   # flag to record that user has paid for analysis
+    session.purchase_id = None             # the current purchase id while a purchase is taking place
 
 
 def handle_redirect_uri():
@@ -32,47 +33,64 @@ def handle_redirect_uri():
     3) (future) after analysis is complete and user returns to view results 
     """    
     # handle api errors
-    if (request.get_vars.error):
+    if request.get_vars.error:
         err_msg = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_message)
         return dict(err_msg=err_msg)                    
-        
-    # handle case: just launched from BaseSpace 
-    if (request.get_vars.appsessionuri):
-        
-        # clear all session variables
-        clear_session_vars()
-        
-        # record app session number
-        appsessionuri = request.get_vars.appsessionuri
-        session.app_session_num = os.path.basename(appsessionuri)
-    
-        # get app session num from BaseSpace
-        app = db(db.app_data.id > 0).select().first()
-        try:
-            bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
-            app_ssn = bs_api.getAppSession()     
-        except Exception as e:
-            return dict(err_msg=str(e))            
-        
-        # get the project num and access string of pre-selected Project
-        ssn_ref = app_ssn.References[0]
-        if (ssn_ref.Type != 'Project'):
-            return dict(err_msg="Error - unrecognized reference type " + ssn_ref.Type + ". ")                
-        ref_content = ssn_ref.Content
-        project_num = ref_content.Id                        
-        
-        # create app_session in db
-        db.app_session.insert(app_session_num=session.app_session_num,
-            project_num=project_num,
-            date_created=app_ssn.DateCreated,
-            status="newly created",
-            message="newly launched App Session - no analysis performed yet")
-        
-        # log user into PicardSpace (user should already be logged into BaseSpace)            
-        session.return_url = URL('user_now_logged_in')            
-        redirect( URL('user', args=['login']) )
-                                                                                                                                                                                                                                                                                                                                                                                              
 
+    if request.get_vars.action:  
+        # handle case: just launched from BaseSpace
+        if (request.get_vars.action == 'trigger'):            
+        
+            if not request.get_vars.appsessionuri:
+                return dict(err_msg="Error: app trigger from BaseSpace not accompanied by an AppSession Id")                 
+            
+            # clear all session variables
+            clear_session_vars()
+            
+            # record app session number
+            appsessionuri = request.get_vars.appsessionuri
+            session.app_session_num = os.path.basename(appsessionuri)
+        
+            # get app session num from BaseSpace
+            app = db(db.app_data.id > 0).select().first()
+            try:
+                bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version,session.app_session_num)
+                app_ssn = bs_api.getAppSession()     
+            except Exception as e:
+                return dict(err_msg=str(e))            
+            
+            # get the project num and access string of pre-selected Project
+            ssn_ref = app_ssn.References[0]
+            if (ssn_ref.Type != 'Project'):
+                return dict(err_msg="Error - unrecognized reference type " + ssn_ref.Type + ". ")                
+            ref_content = ssn_ref.Content
+            project_num = ref_content.Id                        
+            
+            # create app_session in db
+            db.app_session.insert(app_session_num=session.app_session_num,
+                project_num=project_num,
+                date_created=app_ssn.DateCreated,
+                status="newly created",
+                message="newly launched App Session - no analysis performed yet")
+            
+            # log user into PicardSpace (user should already be logged into BaseSpace)            
+            session.return_url = URL('user_now_logged_in')            
+            redirect( URL('user', args=['login']) )
+ 
+        # handle case: just launched from BaseSpace
+        if (request.get_vars.action == 'purchase'):
+            
+            if not request.get_vars.purchaseid:
+                return dict(err_msg="Error: purchase from BaseSpace not accompanied by a Purchase Id")
+            
+            # set purchase status to paid in db
+            p_row = db(db.purchase.purchase_num==request.get_vars.purchaseid).select().first()
+            if not p_row:
+                return dict(err_msg="Error: product id not recognized for purchase")
+            p_row.update_record(status='paid')
+            db.commit()            
+            redirect(session.return_url)
+                                                                                                                                                                                                                                                                                                                                                                                              
     # handle OAuth2 response - exchange authorization code for auth token
     if (request.get_vars.code):        
         # complete login, if login is in progress
@@ -107,10 +125,10 @@ def handle_redirect_uri():
         db.commit()
             
         # go to url specified by original call to get token
-        redirect(session.return_url)            
+        redirect(session.return_url)                  
 
     # shouldn't reach this point - redirect to index page
-    redirect(URL('index'))     
+    return dict(err_msg="Error - didn't recognized parameters after return from BaseSpace redirect")
                                             
 
 def index():
@@ -377,10 +395,10 @@ def start_billing():
         return dict(err_msg="Error calculating product price: " + str(e))        
 
     # construct url for BaseSpace store to return to after purchase
-    if (request.is_local):        
-        return_url = URL('handle_billing_redirect_uri', scheme=True, host=True, port=8000)
-    else:
-        return_url = URL('handle_billing_redirect_uri', scheme=True, host=True)
+    #if (request.is_local):        
+    #    return_url = URL('handle_billing_redirect_uri', scheme=True, host=True, port=8000)
+    #else:
+    #    return_url = URL('handle_billing_redirect_uri', scheme=True, host=True)
     
     # make the purchase, capture url for user to view BaseSpace billing dialog
     try:
@@ -390,32 +408,35 @@ def start_billing():
     
     if not purchase.HrefPurchaseDialog:
         return dict(err_msg="There was a problem getting billing information from BaseSpace")
-    redirect_url = purchase.HrefPurchaseDialog + "?returnurl=" + return_url        
+    #redirect_url = purchase.HrefPurchaseDialog + "?returnurl=" + return_url        
     
     # record purchase in db
     ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()    
-    purchase_id = db.purchase.insert(app_session_id=ssn_row.id,
+    purchase_id = db.purchase.insert(purchase_num=purchase.Id,
+                                     app_session_id=ssn_row.id,
                                      date_created=purchase.DateCreated,
                                      amount=purchase.Amount,
                                      amount_of_tax=purchase.AmountOfTax,    
-                                     amount_total=purchase.AmountTotal)    
+                                     amount_total=purchase.AmountTotal,
+                                     status="pending")    
     db.purchased_product.insert(purchase_id=purchase_id,
                                product_id=prod_purch.prod_id,
                                quantity=prod_purch.prod_quantity)                    
     db.commit()
-        
+    session.purchase_id = purchase_id
     session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
-    redirect(redirect_url)
+    #redirect(redirect_url)
+    redirect(purchase.HrefPurchaseDialog)
     
 
-@auth.requires_login()
-def handle_billing_redirect_uri():
-    """
-    After billing is successful, this method handles the return to proceed with beginning analysis
-    """
-    session.paid = True
-    # TODO check that session.return_url is set
-    redirect(session.return_url)
+#@auth.requires_login()
+#def handle_billing_redirect_uri():
+#    """
+#    After billing is successful, this method handles the return to proceed with beginning analysis
+#    """
+#    session.paid = True
+#    # TODO check that session.return_url is set
+#    redirect(session.return_url)
 
 
 @auth.requires_login()
@@ -493,9 +514,13 @@ def start_analysis():
     file_num = request.vars['file_num']    
 
     # make sure we gots green
-    if not session.paid:
+    #if not session.paid:
+    if not session.purchase_id:
         return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
-        
+    p_row = db(db.purchase.id==session.purchase_id).select().first()
+    if p_row.status != 'paid':
+        return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
+    
     # get input app result and sample objs from Basespace
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     user_row = db(db.auth_user.id==auth.user_id).select().first()                    
