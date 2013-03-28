@@ -7,6 +7,13 @@ from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import shutil
 
 
+class UnrecognizedProductException(Exception):
+    def __init__(self, value):
+        self.parameter = 'The following product name was not recognized: ' + str(value)
+    def __str__(self):
+        return repr(self.parameter)
+
+
 class File(object):
     """
     A File in BaseSpace
@@ -274,6 +281,8 @@ class ProductPurchase(object):
         """              
         db=current.db        
         prod_row = db(db.product.name==prod_name).select().first()
+        if not prod_row:
+            raise UnrecognizedProductException(prod_name)
         self.prod_name=prod_name
         self.prod_id=prod_row.id
         self.prod_price=prod_row.price
@@ -282,26 +291,26 @@ class ProductPurchase(object):
         self.amount=None
         self.prod_quantity=None
 
-    def calc_price(self, file_num, access_token):
+    def calc_quantity(self, file_num, access_token):
         """
         Calculates quantity of product needed to purchase from analyzing the provided file
         """
         self.file_num=file_num
-        if(self.prod_name is current.product_names['AlignmentQC']):
+        if(self.prod_name == current.product_names['AlignmentQC']):
             db=current.db     
                 
-            app = db(db.app_data.id > 0).select().first()                
-                    
+            app = db(db.app_data.id > 0).select().first()                                    
             bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, "", access_token)                
             input_file = bs_api.getFileById(file_num)    
         
             if input_file.Size < 100000000: # <100 MB
                 self.prod_quantity = 1
-            if input_file.Size < 1000000000: # <1 GB
+            elif input_file.Size < 1000000000: # <1 GB
                 self.prod_quantity = 5
             else:                           # >1 GB
                 self.prod_quantity = 10       
-
+        else:
+            raise UnrecognizedProductException(self.prod_name)
 
 
 def readable_bytes(size,precision=2):

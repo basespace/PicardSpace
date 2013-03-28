@@ -340,12 +340,15 @@ def confirm_analysis_inputs():
     except Exception as e:
         return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg=str(e))        
     
-    # calculate how much to charge        
-    prod_purch = ProductPurchase('AlignmentQC')
+    # calculate how much to charge                
+    try:        
+        prod_purch = ProductPurchase('AlignmentQC')
+    except:
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg="Error - creating product purchase: " + str(e))
     try:
-        prod_purch.calc_price(file_num, user_row.access_token)
+        prod_purch.calc_quantity(file_num, user_row.access_token)
     except Exception as e:
-        return dict(err_msg="Error calculating product price: " + str(e))        
+        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg="Error - calculating product price: " + str(e))                   
     price = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
     
     # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
@@ -405,13 +408,16 @@ def start_billing():
     except Exception as e:
         return dict(err_msg="Error - setting BaseSpace billing timeout: " + str(e))
     
-    # calculate how much to charge        
-    prod_purch = ProductPurchase('AlignmentQC')
+    # calculate how much to charge
+    try:        
+        prod_purch = ProductPurchase('AlignmentQC')
+    except:
+        return dict(err_msg="Error - creating product purchase: " + str(e))
     try:
-        prod_purch.calc_price(file_num, user_row.access_token)
+        prod_purch.calc_quantity(file_num, user_row.access_token)
     except Exception as e:
         return dict(err_msg="Error - calculating product price: " + str(e))        
-    
+        
     # make the purchase, capture url for user to view BaseSpace billing dialog
     try:
         purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
