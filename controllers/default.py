@@ -94,10 +94,13 @@ def handle_redirect_uri():
                 store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)
                 purch = store_api.getPurchaseById(request.get_vars.purchaseid)                        
             except:
-                return dict(err_msg=str(e))            
+                return dict(err_msg=str(e))                                
             
             # record invoice number and set purchase status to paid in db
-            p_row.update_record(status='paid', invoice_number=purch.InvoiceNumber)
+            try:
+                p_row.update_record(status='paid', invoice_number=purch.InvoiceNumber)
+            except AttributeError:
+                return dict(err_msg="Error: this purchase does not have invoice number. This is most likely because the purchase did not complete successfully -- please try the purchase again.")
             db.commit()            
             redirect(session.return_url)
                                                                                                                                                                                                                                                                                                                                                                                               
@@ -389,11 +392,12 @@ def start_billing():
     file_num = request.vars['file_num']
     # TODO check that this product hasn't already been purchased for this session? prevent double purchases
 
-    # get store API
+    # get store API, set long timeout since purchase requests may be long
     user_row = db(db.auth_user.id==auth.user_id).select().first()    
     app = db(db.app_data.id > 0).select().first()            
     try:
-        store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)            
+        store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)
+        store_api.setTimeout(30)            
     except Exception as e:
         return dict(err_msg=str(e))
     
