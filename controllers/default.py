@@ -396,10 +396,14 @@ def start_billing():
     user_row = db(db.auth_user.id==auth.user_id).select().first()    
     app = db(db.app_data.id > 0).select().first()            
     try:
-        store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)
+        store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)                
+    except Exception as e:
+        return dict(err_msg="Error - getting BaseSpace billing API: " + str(e))
+    
+    try:    
         store_api.setTimeout(30)            
     except Exception as e:
-        return dict(err_msg=str(e))
+        return dict(err_msg="Error - setting BaseSpace billing timout: " + str(e))
     
     # calculate how much to charge        
     prod_purch = ProductPurchase('AlignmentQC')
