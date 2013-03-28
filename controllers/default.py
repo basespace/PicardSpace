@@ -403,20 +403,20 @@ def start_billing():
     try:    
         store_api.setTimeout(30)            
     except Exception as e:
-        return dict(err_msg="Error - setting BaseSpace billing timout: " + str(e))
+        return dict(err_msg="Error - setting BaseSpace billing timeout: " + str(e))
     
     # calculate how much to charge        
     prod_purch = ProductPurchase('AlignmentQC')
     try:
         prod_purch.calc_price(file_num, user_row.access_token)
     except Exception as e:
-        return dict(err_msg="Error calculating product price: " + str(e))        
+        return dict(err_msg="Error - calculating product price: " + str(e))        
     
     # make the purchase, capture url for user to view BaseSpace billing dialog
     try:
         purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
     except Exception as e:
-        return dict(err_msg=str(e))        
+        return dict(err_msg="Error - creating purchase: " + str(e))        
     if not purchase.HrefPurchaseDialog:
         return dict(err_msg="There was a problem getting billing information from BaseSpace")
     
