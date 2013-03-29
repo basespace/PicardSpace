@@ -78,7 +78,7 @@ def handle_redirect_uri():
             redirect( URL('user', args=['login']) )
  
         # handle case: just launched from BaseSpace
-        if (request.get_vars.action == 'purchase'):            
+        elif (request.get_vars.action == 'purchase'):            
             if not request.get_vars.purchaseid:
                 return dict(err_msg="Error: purchase from BaseSpace not accompanied by a purchase id")
 
@@ -103,42 +103,45 @@ def handle_redirect_uri():
                 return dict(err_msg="Error: this purchase does not have invoice number. This is most likely because the purchase did not complete successfully -- please try the purchase again.")
             db.commit()            
             redirect(session.return_url)
-                                                                                                                                                                                                                                                                                                                                                                                              
-    # handle OAuth2 response - exchange authorization code for auth token
-    if (request.get_vars.code):        
-        # complete login, if login is in progress
-        if session.in_login:
-            redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code)))
-
-        # ensure user is logged in
-        if not session.auth:
-            return dict(err_msg="Error - user isn't logged in but should be")
-
-        # non-login oauth2                        
-        try:
-            access_token = get_access_token_util(request.get_vars.code)
-        except Exception as e:
-            return dict(err_msg=str(e))
-
-        # ensure the current app user is the same as the current BaseSpace user        
-        user_row = db(db.auth_user.id==auth.user_id).select().first()
-        cur_user_id = user_row.username
-        app = db(db.app_data.id > 0).select().first()
-        try:
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, access_token)
-            bs_user = bs_api.getUserById('current')
-        except Exception as e:
-            return dict(err_msg=str(e))
-
-        if (bs_user.Id != cur_user_id):
-            return dict(err_msg="Error - mismatch between PicardSpace user id of " + str(cur_user_id) + " and current BaseSpace user id of " + str(bs_user.Id) + ". Please re-login to PicardSpace.")
-                               
-        # update user's access token in user table
-        user_row.update_record(access_token=access_token)
-        db.commit()
-            
-        # go to url specified by original call to get token
-        redirect(session.return_url)                  
+    
+        # handle OAuth2 response - exchange authorization code for auth token               
+        elif (request.get_vars.action == 'oauthv2authorization'):
+            if not request.get_vars.code:
+                return dict(err_msg="Error: oauth2 authorization from BaseSpace not accompanied by an auth code")            
+                                                                                                                                                                                                                                                                                                                                                                                                           
+            # complete login, if login is in progress
+            if session.in_login:
+                redirect( URL('user', args=['login'], vars=dict(code=request.get_vars.code)))
+    
+            # ensure user is logged in
+            if not session.auth:
+                return dict(err_msg="Error - user isn't logged in but should be")
+    
+            # non-login oauth2                        
+            try:
+                access_token = get_access_token_util(request.get_vars.code)
+            except Exception as e:
+                return dict(err_msg=str(e))
+    
+            # ensure the current app user is the same as the current BaseSpace user        
+            user_row = db(db.auth_user.id==auth.user_id).select().first()
+            cur_user_id = user_row.username
+            app = db(db.app_data.id > 0).select().first()
+            try:
+                bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, access_token)
+                bs_user = bs_api.getUserById('current')
+            except Exception as e:
+                return dict(err_msg=str(e))
+    
+            if (bs_user.Id != cur_user_id):
+                return dict(err_msg="Error - mismatch between PicardSpace user id of " + str(cur_user_id) + " and current BaseSpace user id of " + str(bs_user.Id) + ". Please re-login to PicardSpace.")
+                                   
+            # update user's access token in user table
+            user_row.update_record(access_token=access_token)
+            db.commit()
+                
+            # go to url specified by original call to get token
+            redirect(session.return_url)                  
 
     # shouldn't reach this point - redirect to index page
     return dict(err_msg="Error - didn't recognized parameters after return from BaseSpace redirect")
