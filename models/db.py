@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-
-db = DAL('sqlite://storage.sqlite')
+import os.path    
+from urlparse import urlparse
 from gluon import current, HTTP
 from gluon.tools import Auth
 from gluon.scheduler import Scheduler
-from urlparse import urlparse
 from picardSpace import get_auth_code_util, get_access_token_util, download_bs_file, analyze_bs_file
+
+# get database info from local file
+with open (os.path.join(request.folder, "private", 'ticket_storage.txt'), 'r') as DBF:    
+    db = DAL(DBF.readline().strip())
 current.db = db
 
 # instantiate web2py Scheduler
