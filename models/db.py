@@ -8,7 +8,7 @@ from picardSpace import get_auth_code_util, get_access_token_util, download_bs_f
 
 # get database info from local file
 with open (os.path.join(request.folder, "private", 'ticket_storage.txt'), 'r') as DBF:    
-    db = DAL(DBF.readline().strip(), fake_migrate_all=True)
+    db = DAL(DBF.readline().strip()) #, fake_migrate_all=True)
 current.db = db
 
 # instantiate web2py Scheduler
