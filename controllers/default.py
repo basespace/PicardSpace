@@ -447,7 +447,8 @@ def start_billing():
                                      status="pending")    
     db.purchased_product.insert(purchase_id=purchase_id,
                                product_id=prod_purch.prod_id,
-                               quantity=prod_purch.prod_quantity)                    
+                               quantity=prod_purch.prod_quantity,
+                               prod_price=prod_purch.prod_price)                    
     db.commit()
     session.purchase_id = purchase_id
     session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))

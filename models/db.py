@@ -279,7 +279,7 @@ db.define_table('output_file',
 db.define_table('product',              # products for billing, corresponding to manually created products in BaseSpace dev portal
     Field('name'),
     Field('num'),
-    Field('price'))
+    Field('price'))                     # current price (may change over time)
 
 db.define_table('purchase',             # purchase made by user
     Field('purchase_num'),
@@ -294,5 +294,6 @@ db.define_table('purchase',             # purchase made by user
 db.define_table('purchased_product',    # product(s) that were bought in a user purchase 
     Field('purchase_id', db.purchase),
     Field('product_id', db.product),
-    Field('quantity'))                    
+    Field('quantity'),
+    Field('prod_price'))                # price of product for this purchase (product price can change over time)
     
