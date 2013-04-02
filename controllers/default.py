@@ -96,6 +96,13 @@ def handle_redirect_uri():
             except:
                 return dict(err_msg=str(e))                                
             
+            # check that purchase was paid in BaseSpace
+            try:
+                if purch.Status != 'COMPLETED':
+                    return dict(err_msg="Error: purchase was not completed in BaseSpace")
+            except AttributeError:
+                return dict(err_msg="Error: purchase does not have a status")
+            
             # record invoice number and set purchase status to paid in db
             try:
                 p_row.update_record(status='paid', invoice_number=purch.InvoiceNumber)
