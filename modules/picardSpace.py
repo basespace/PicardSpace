@@ -84,10 +84,7 @@ class AnalysisInputFile(File):
             file_row.update_record(local_path=local_file)
             db.commit()               
         
-            # add file to analysis queue                        
-            #q.enqueue_call(func=analyze_bs_file, 
-            #       args=(self.bs_file_id,),
-            #       timeout=86400) # seconds
+            # add file to analysis queue                                    
             current.scheduler.queue_task(analyze_bs_file, 
                                  pvars = {'input_file_id':self.bs_file_id}, 
                                  timeout = 86400) # seconds
@@ -215,22 +212,19 @@ class AppResult(object):
         stderr_name = file_name + ".stderr.txt"
         stdout_path = os.path.join(dirname, stdout_name)
         stderr_path = os.path.join(dirname, stderr_name)
-        F_STDOUT = open( stdout_path, "w")
-        F_STDERR = open( stderr_path, "w")
-        F_STDOUT.write(stdout)
-        F_STDERR.write(stderr)                
-        F_STDOUT.close()
-        F_STDERR.close()
+        with open(stdout_path, "w") as FO:
+            FO.write(stdout)
+        with open(stderr_path, "w") as FE:
+            FE.write(stderr)
         
         # add stdout and stderr to write-back queue
-        # but don't upload empty files since API currently chokes on these
-        if os.path.getsize(stdout_path):
+        # but don't upload empty files since API currently chokes on these        
+        if len(stdout):
             f_stdout = File(app_result_id=self.app_result_id,
                 file_name=stdout_name,
                 local_path=stdout_path)        
-            self.output_files.append(f_stdout)
-            
-        if os.path.getsize(stderr_path):                    
+            self.output_files.append(f_stdout)            
+        if len(stderr):                            
             f_stderr = File(app_result_id=self.app_result_id,
                 file_name=stderr_name,
                 local_path=stderr_path)                                
