@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-
 import os.path
-from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
-from BaseSpacePy.api.BillingAPI import BillingAPI
 import re
-from picardSpace import File, AnalysisInputFile, ProductPurchase, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 import shutil
 from gluon import HTTP
+from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
+from BaseSpacePy.api.BillingAPI import BillingAPI
+from picardSpace import File, AnalysisInputFile, ProductPurchase, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
 
 # Auth notes:
 # 1. All '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called (and _next=controller_method)
 # 2. Once a user is logged into picardSpace, they can use their existing tokens to view the results -- even if they log out of BaseSpace -- because tokens are good regardless of BaseSpace login
-
 
 def clear_session_vars():
     """
@@ -411,8 +409,7 @@ def start_billing():
     try:
         store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)                
     except Exception as e:
-        return dict(err_msg="Error - getting BaseSpace billing API: " + str(e))
-    
+        return dict(err_msg="Error - getting BaseSpace billing API: " + str(e))    
     try:    
         store_api.setTimeout(30)            
     except Exception as e:
@@ -463,8 +460,7 @@ def create_writeback_project():
     if ('ar_name' not in request.vars or
         'ar_num' not in request.vars or
         'file_num' not in request.vars):        
-        return dict(err_msg="We have a problem - expected query variables but didn't receive them")
-    
+        return dict(err_msg="We have a problem - expected query variables but didn't receive them")    
     ar_name = request.vars['ar_name']
     ar_num = request.vars['ar_num']
     file_num = request.vars['file_num']
@@ -522,17 +518,15 @@ def start_analysis():
         'wb_proj_num' not in request.vars or
         'ar_num' not in request.vars or
         'file_num' not in request.vars):        
-        return dict(err_msg="We have a problem - expected query variables but didn't receive them")
-    
+        return dict(err_msg="We have a problem - expected query variables but didn't receive them")    
     ar_name = request.vars['ar_name']
     wb_proj_num = request.vars['wb_proj_num']
     ar_num = request.vars['ar_num']
     file_num = request.vars['file_num']    
 
-    # make sure we gots green
-    #if not session.paid:
+    # make sure the user paid
     if not session.purchase_id:
-        return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
+        return dict(err_msg="You gotta pay to play - didn't receive a purchase id")
     p_row = db(db.purchase.id==session.purchase_id).select().first()
     if p_row.status != 'paid':
         return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
@@ -557,6 +551,11 @@ def start_analysis():
             sample = bs_api.getSampleById(sample_num)
         except Exception as e:
             return dict(err_msg=str(e))
+            
+    # clean app result name - only allow alpha, numeric, and a few symbols
+    ar_name = re.sub("[^a-zA-Z0-9_.,()\[\]+-]", "", ar_name.strip())        
+    if not ar_name:
+        ar_name = 'PicardSpace Result'
             
     # add new AppResult to BaseSpace
     try:
