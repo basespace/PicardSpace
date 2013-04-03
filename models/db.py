@@ -69,21 +69,16 @@ auth.settings.expiration = 3600  # seconds
 current.aln_metrics_ext = ".AlignmentMetrics.txt"
 current.product_names = {'AlignmentQC':'AlignmentQC'}
 
-# define app data - NOTE if changing any defaults, must manually deleted existing db entry
+# define app data - 
+# NOTE - on initial install, must configure client_id, client_secret, and redirect_uri (and product(s) in product table)
 db.define_table('app_data',
-    #Field('client_id', default='771bb853e8a84daaa79c6ce0bcb2f8e5'),                              # basespace.com, user basespaceuser1, app picardSpace
-    #Field('client_secret', default='af244c8c6a674e3fb6e5280605512393'),
-    #Field('baseSpaceUrl', default='https://api.basespace.illumina.com/'),
-    #Field('version', default='v1pre3'),
-    #Field('auth_url', default='https://basespace.illumina.com/oauth/authorize'),
-    #Field('token_url', default='https://api.basespace.illumina.com/v1pre3/oauthv2/token/'),
-    Field('client_id', default='9aec318fb4f7467fbfe2f88c9a3632aa'),                               # portal hoth
-    Field('client_secret', default='4fee19aca5fd49e98fa60693d9fbb6ae'),                           # portal hoth    
-    Field('baseSpaceUrl', default='https://api.cloud-hoth.illumina.com/'),                        # portal hoth
+    Field('client_id'),
+    Field('client_secret'),    
+    Field('baseSpaceUrl', default='https://api.cloud-hoth.illumina.com/'),
     Field('version', default='v1pre3'),
-    Field('auth_url', default='https://cloud-hoth.illumina.com/oauth/authorize'),                 # portal hoth
-    Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),      # portal hoth    
-    Field('redirect_uri', default=''),
+    Field('auth_url', default='https://cloud-hoth.illumina.com/oauth/authorize'),
+    Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),    
+    Field('redirect_uri', default='http://localhost:8000/PicardSpace/default/handle_redirect_uri'),
     Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
     Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
 
@@ -182,17 +177,7 @@ class BaseSpaceAccount(object):
         Otherwise, start Oauth2 by requesting an auth code from BaseSpace.
         (BaseSpace will redirect to the redirect_uri, handled in our controller, 
         which will again call login() and we'll end up in this method again to handle the auth code)                                                        
-        '''        
-        # set redirect_uri if it isn't set yet (only done on very first login)
-        app = db(db.app_data.id > 0).select().first()
-        if not app.redirect_uri:
-            if (request.is_local):                
-                redirect_uri = URL('handle_redirect_uri', scheme=True, host=True, port=8000)
-            else:                
-                redirect_uri = URL('handle_redirect_uri', scheme=True, host=True)
-            app.update_record(redirect_uri=redirect_uri)
-            db.commit()
-        
+        '''                
         # handle errors from BaseSpace during login        
         if request.vars.error:
             raise HTTP(200, "Permission to access BaseSpace data was rejected by the user", Location=None)
@@ -203,11 +188,8 @@ class BaseSpaceAccount(object):
             session.in_login = False
             return
                         
-        # start login Oauth2 - get an auth code for this login, record login state for handle_redirect_uri()
-        # TODO if user is already logged into PicardSpace, check that current BS user matches?                                                                                          
-        session.in_login = True
-
-        # redirect to BaseSpace to get auth code -- will return to redirect_uri
+        # don't have auth code yet -- start login Oauth2, record login state for handle_redirect_uri()                                                                                    
+        session.in_login = True    
         auth_request_url = get_auth_code_util(scope="")
         raise HTTP(
             307, 
