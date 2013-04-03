@@ -304,9 +304,9 @@ def choose_analysis_file():
     file_info = []    
     for f in bs_files:      
         
-        # don't allow analysis of files > 1 GB
+        # don't allow analysis of files > 5 GB
         large_file = ""
-        if (f.Size > 1000000000):     
+        if (f.Size > 5000000000):     
             large_file = "large_file"            
         file_info.append( { "file_name" : f.Name + " (" + readable_bytes(f.Size) + ")",
                             "file_num" : f.Id,
