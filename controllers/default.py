@@ -174,7 +174,7 @@ def index():
     else:
         login_url = URL('user', args=['login'], scheme=True, host=True)
                                     
-    return dict(main_msg=main_msg, scnd_msg=scnd_msg, err_msg=err_msg, login_url=login_url)
+    return dict(main_msg=main_msg, scnd_msg=scnd_msg, err_msg=err_msg, login_url=login_url, bs_url=auth.settings.logout_next)
 
 
 @auth.requires_login()

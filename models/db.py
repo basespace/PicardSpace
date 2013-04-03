@@ -87,13 +87,10 @@ app_data = db(db.app_data.id > 0).select().first()
 if not app_data:
     app_data = db.app_data.insert()
 
-# generate link to BaseSpace server
-p_url = urlparse(app_data.auth_url)
-baseSpace_link = p_url.scheme + "://" + p_url.netloc
-del app_data, p_url
-
 # set logout location to BaseSpace server
-auth.settings.logout_next = baseSpace_link
+p_url = urlparse(app_data.auth_url)
+auth.settings.logout_next = p_url.scheme + "://" + p_url.netloc
+del app_data, p_url
 
 
 # define class for web2py login with BaseSpace credentials 
