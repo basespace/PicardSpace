@@ -67,8 +67,13 @@ class AnalysisInputFile(File):
         db.commit()
         
         # set local_path location and url for downloading
-        local_dir = os.path.join(current.request.folder, "private", "downloads", "inputs", str(ssn_row.app_session_num))
-
+        app = db(db.app_data.id > 0).select().first()
+        if app.scratch_path:
+            root_dir = app.scratch_path
+        else:                
+            root_dir = os.path.join(current.request.folder, "private")
+        local_dir = os.path.join(root_dir, "downloads", "inputs", str(ssn_row.app_session_num))
+        
         # download file from BaseSpace
         try:
             local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)

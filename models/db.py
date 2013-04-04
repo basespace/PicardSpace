@@ -80,7 +80,8 @@ db.define_table('app_data',
     Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),    
     Field('redirect_uri', default='http://localhost:8000/PicardSpace/default/handle_redirect_uri'),
     Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
-    Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
+    Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'),
+    Field('scratch_path'))
 
 # create an instance of app_data table if not present
 app_data = db(db.app_data.id > 0).select().first()
