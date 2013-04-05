@@ -51,7 +51,7 @@ These steps have been tested on Ubuntu and Mac OSX.
 
 8. Add a product to your product catalog in the BaseSpace dev portal (you may need to contact BaseSpace to get permission to add pricing to your app). Under the pricing tab, add a new consumable product named 'AlignmentQC' with a price of 2 iCredits (or whatever you wish). You'll need the new product Id in the next step.
 
-9. Set app data and product info in the local database. Use the web2py admin panel (localhost:8000/PicardSpace/appadmin/index) to edit your local database. For table 'app_data', add your client_id, client_secret, and redirect_uri from the dev portal Details tab. For table 'purchase', add the product info you just added in the dev portal, with product.id=1, product.name=AlignmentQC, product.num=the id from the pricing tab in the dev portal, and product.price=your price.
+9. Set app data and product info in the local database. Use the web2py admin panel (localhost:8000/PicardSpace/appadmin/index) to edit your local database. For table 'app_data', add your client_id, client_secret, and redirect_uri from the dev portal Details tab. For table 'product', add the product info you just added in the dev portal, with product.name=AlignmentQC, product.num=the id from the pricing tab in the dev portal, and product.price=your price.
 
 Now go launch your new app in BaseSpace from any Project that contains an AppResult with a (small) BAM file.
 
