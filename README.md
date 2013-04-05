@@ -23,10 +23,11 @@ These steps have been tested on Ubuntu and Mac OSX.
         brew install python
         pip install pycurl
 
-3. Download and unzip web2py source code. If you're on Mac OSX, don't download the pre-built Mac application.
+3. Download and unzip web2py source code. If you're on Mac OSX, don't download the pre-built Mac application. On ubuntu you may also need to install python-tk.
 
         wget http://www.web2py.com/examples/static/web2py_src.zip
         unzip web2py_src.zip
+        sudo apt-get install python-tk
 
 4. Clone this PicardSpace repository into the web2py applications directory.
 
@@ -48,7 +49,7 @@ These steps have been tested on Ubuntu and Mac OSX.
 - Home Page: http://localhost:8000/PicardSpace
 - Redirect URI: http://localhost:8000/PicardSpace/default/handle\_redirect\_uri
 
-8. Add a product to your product catalog in the BaseSpace dev portal. Under the pricing tab, add a new consumable product named 'AlignmentQC' with a price of 2 iCredits (or whatever you wish). You'll need the new product Id in the next step.
+8. Add a product to your product catalog in the BaseSpace dev portal (you may need to contact BaseSpace to get permission to add pricing to your app). Under the pricing tab, add a new consumable product named 'AlignmentQC' with a price of 2 iCredits (or whatever you wish). You'll need the new product Id in the next step.
 
 9. Set app data and product info in the local database. Use the web2py admin panel (localhost:8000/PicardSpace/appadmin/index) to edit your local database. For table 'app_data', add your client_id, client_secret, and redirect_uri from the dev portal Details tab. For table 'purchase', add the product info you just added in the dev portal, with product.id=1, product.name=AlignmentQC, product.num=the id from the pricing tab in the dev portal, and product.price=your price.
 
