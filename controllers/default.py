@@ -2,6 +2,7 @@
 import os.path
 import re
 import shutil
+from datetime import datetime
 from gluon import HTTP
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
@@ -425,7 +426,6 @@ def start_billing():
     ar_name = request.vars['ar_name']
     ar_num = request.vars['ar_num']
     file_num = request.vars['file_num']
-    # TODO check that this product hasn't already been purchased for this session? prevent double purchases
 
     # get store API, set long timeout since purchase requests may be long
     user_row = db(db.auth_user.id==auth.user_id).select().first()    
@@ -433,48 +433,70 @@ def start_billing():
     try:
         store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)                
     except Exception as e:
-        return dict(err_msg="Error - getting BaseSpace billing API: " + str(e))    
+        return dict(err_msg="Error getting BaseSpace billing API: " + str(e))    
     try:    
         store_api.setTimeout(30)            
     except Exception as e:
-        return dict(err_msg="Error - setting BaseSpace billing timeout: " + str(e))
+        return dict(err_msg="Error setting BaseSpace billing timeout: " + str(e))
     
     # calculate how much to charge
     try:        
         prod_purch = ProductPurchase('AlignmentQC')
     except:
-        return dict(err_msg="Error - creating product purchase: " + str(e))
+        return dict(err_msg="Error creating product purchase: " + str(e))
     try:
         prod_purch.calc_quantity(file_num, user_row.access_token)
     except Exception as e:
-        return dict(err_msg="Error - calculating product price: " + str(e))        
-        
-    # make the purchase, capture url for user to view BaseSpace billing dialog
-    try:
-        purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
-    except Exception as e:
-        return dict(err_msg="Error - creating purchase: " + str(e))        
-    if not purchase.HrefPurchaseDialog:
-        return dict(err_msg="There was a problem getting billing information from BaseSpace")
+        return dict(err_msg="Error calculating product price: " + str(e))        
     
+    # create purchase, if not free
+    if prod_purch.prod_quantity != 0:                    
+        try:
+            purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
+        except Exception as e:
+            return dict(err_msg="Error creating purchase: " + str(e))        
+        # capture url for user to view BaseSpace billing dialog
+        if not purchase.HrefPurchaseDialog:
+            return dict(err_msg="There was a problem getting billing information from BaseSpace")
+        purchase_num = purchase.Id
+        date_created = purchase.DateCreated
+        amount = purchase.Amount
+        amount_of_tax = purchase.AmountOfTax   
+        amount_total = purchase.AmountTotal
+        status = "pending"
+        redirect_url = purchase.HrefPurchaseDialog
+        session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
+    else:
+        # free analysis
+        purchase_num = "none"
+        date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        amount = 0
+        amount_of_tax = 0    
+        amount_total = 0
+        status="free"
+        redirect_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
+        
     # record purchase in db
     ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()    
-    purchase_id = db.purchase.insert(purchase_num=purchase.Id,
+    purchase_id = db.purchase.insert(purchase_num=purchase_num,
                                      app_session_id=ssn_row.id,
-                                     date_created=purchase.DateCreated,
-                                     amount=purchase.Amount,
-                                     amount_of_tax=purchase.AmountOfTax,    
-                                     amount_total=purchase.AmountTotal,
-                                     status="pending")    
+                                     date_created=date_created,
+                                     amount=amount,
+                                     amount_of_tax=amount_of_tax,    
+                                     amount_total=amount_total,
+                                     status=status)    
     db.purchased_product.insert(purchase_id=purchase_id,
-                               product_id=prod_purch.prod_id,
-                               quantity=prod_purch.prod_quantity,
-                               prod_price=prod_purch.prod_price)                    
+                                product_id=prod_purch.prod_id,
+                                quantity=prod_purch.prod_quantity,
+                                prod_price=prod_purch.prod_price)                    
     db.commit()
-    session.purchase_id = purchase_id
-    session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
-    redirect(purchase.HrefPurchaseDialog)
-    
+    # set purchase id now that purchase is in db (or free)
+    if prod_purch.prod_quantity != 0:
+        session.purchase_id = purchase_id
+    else:
+        session.purchase_id = 'free'        
+    redirect(redirect_url)
+            
 
 @auth.requires_login()
 def create_writeback_project():
@@ -552,12 +574,13 @@ def start_analysis():
     ar_num = request.vars['ar_num']
     file_num = request.vars['file_num']    
 
-    # make sure the user paid
+    # for purchased analysis, make sure the user paid
     if not session.purchase_id:
-        return dict(err_msg="You gotta pay to play - didn't receive a purchase id")
-    p_row = db(db.purchase.id==session.purchase_id).select().first()
-    if p_row.status != 'paid':
-        return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
+        return dict(err_msg="Error in determining purchase status of this analysis")
+    if session.purchase_id != 'free':
+        p_row = db(db.purchase.id==session.purchase_id).select().first()
+        if p_row.status != 'paid':
+            return dict(err_msg="You gotta pay to play - we didn't receive billing for this analysis")
     
     # get input app result and sample objs from Basespace
     app_ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
