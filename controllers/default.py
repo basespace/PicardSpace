@@ -89,7 +89,8 @@ def handle_redirect_uri():
             app = db(db.app_data.id > 0).select().first()
             user_row = db(db.auth_user.id==auth.user_id).select().first()
             try:
-                store_api = BillingAPI(app.store_url, app.version, session.app_session_num, user_row.access_token)
+                store_api = BillingAPI(app.store_url, app.version, 
+                                       session.app_session_num, user_row.access_token)
                 purch = store_api.getPurchaseById(request.get_vars.purchaseid)                        
             except:
                 return dict(err_msg=str(e))                                
@@ -133,7 +134,9 @@ def handle_redirect_uri():
             cur_user_id = user_row.username
             app = db(db.app_data.id > 0).select().first()
             try:
-                bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, access_token)
+                bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                                      app.baseSpaceUrl, app.version, 
+                                      session.app_session_num, access_token)
                 bs_user = bs_api.getUserById('current')
             except Exception as e:
                 return dict(err_msg=str(e))
@@ -173,8 +176,9 @@ def index():
         login_url = URL('user', args=['login'], scheme=True, host=True, port=8000)  # vars=dict(_next=URL('user_now_logged_in')), 
     else:
         login_url = URL('user', args=['login'], scheme=True, host=True)
-                                    
-    return dict(main_msg=main_msg, scnd_msg=scnd_msg, err_msg=err_msg, login_url=login_url, bs_url=auth.settings.logout_next)
+                                        
+    return dict(main_msg=main_msg, scnd_msg=scnd_msg, err_msg=err_msg, 
+                login_url=login_url, bs_url=auth.settings.logout_next)
 
 
 @auth.requires_login()
@@ -202,68 +206,79 @@ def choose_analysis_app_result():
     """
     Offers the user choice of AppResult to analyze
     """
-    ar_offset = 0
+    ret = dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", 
+               next_offset="", next_limit="", prev_offset="", prev_limit="", 
+               ar_back="", ar_offset="", ar_limit="", err_msg="")        
+    ret['ar_offset'] = 0
     const_ar_limit = 5
-    ar_limit = const_ar_limit
+    ret['ar_limit'] = const_ar_limit
     if request.vars.ar_offset:
-        ar_offset=int(request.vars.ar_offset)
+        ret['ar_offset'] = int(request.vars.ar_offset)
     if request.vars.ar_limit:
-        ar_limit=int(request.vars.ar_limit)    
+        ret['ar_limit'] = int(request.vars.ar_limit)    
 
     # record offset and limit for 'back' link    
-    ar_back = URL('choose_analysis_app_result', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))                    
+    ret['ar_back'] = URL('choose_analysis_app_result', vars=dict(ar_offset=ret['ar_offset'], ar_limit=ret['ar_limit']))                    
 
     # get name of project from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              session.app_session_num, user_row.access_token)        
         proj = bs_api.getProjectById(ssn_row.project_num)
     except Exception as e:
-        return dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg=str(e))        
-    project_name = proj.Name    
+        ret['err_msg'] = "Error retrieving project from BaseSpace: " + str(e) 
+        return ret        
+    ret['project_name'] = proj.Name    
 
     # get App Results for current Project, limited by limit and offset for performance
-    ar_info = []    
-    try:      
-        # app_result list is in condensed API form - no References, Genome -- get these below                        
+    try:
+        # app_result list is in condensed API form - no References, Genome -- get these below                    
         app_results = proj.getAppResults(bs_api, myQp={'Limit':1024})
-        ar_tot = len(app_results)
+    except Exception as e:
+        ret['err_msg'] = "Error retrieving AppResults from BaseSpace: " + str(e)
+        return ret
+    ret['ar_tot'] = len(app_results)
 
-        # don't allow indexing off end of app_results list
-        ar_end = ar_offset+ar_limit        
-        if ar_end > ar_tot:
-            ar_end = ar_tot                
-                                        
-        for n in range(ar_offset,ar_end):        
-            ar_short = app_results[n]
-            
+    # don't allow indexing off end of app_results list
+    ret['ar_end'] = ret['ar_offset'] + ret['ar_limit']        
+    if ret['ar_end'] > ret['ar_tot']:
+        ret['ar_end'] = ret['ar_tot']                
+                                
+    ar_info = []        
+    for n in range(ret['ar_offset'], ret['ar_end']):        
+        ar_short = app_results[n]            
+        try:
             # get full-form app_result from API to get Sample name (from relationship to AppResult)            
             ar = bs_api.getAppResultById(ar_short.Id)            
             # get Samples - this method calls API once for each Sample
             samples = ar.getReferencedSamples(bs_api)
-
-            # build string of Sample names for display            
-            samples_names = []
-            for s in samples:
-                samples_names.append(s.Name)          
-            ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
-                              "app_result_num" : ar.Id } )                                                  
-    except Exception as e:
-        return dict(project_name=project_name, ar_info="", ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg=str(e))                                                                                                                                                                                 
+        except Exception as e:
+            ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
+            return ret
+        # build string of Sample names for display            
+        samples_names = []
+        for s in samples:
+            samples_names.append(s.Name)          
+        ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
+                          "app_result_num" : ar.Id } )                                                  
+    ret['ar_info'] = ar_info
     
     # calculate next and prev start/end                                                                                                                                        
-    next_offset = ar_end
-    next_limit = const_ar_limit    
-    prev_offset = ar_offset - const_ar_limit
-    prev_limit = const_ar_limit                                                                    
-    if next_offset > ar_tot:
-        next_offset = ar_tot    
-    if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
-        prev_offset = 0
-                                                                                                                                                                                                                
-    return dict(project_name=project_name, ar_info=ar_info, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, ar_offset=ar_offset, ar_limit=ar_limit, err_msg="")
+    ret['next_offset'] = ret['ar_end']
+    ret['next_limit'] = const_ar_limit    
+    ret['prev_offset'] = ret['ar_offset'] - const_ar_limit
+    ret['prev_limit'] = const_ar_limit                                                                    
+    if ret['next_offset'] > ret['ar_tot']:
+        ret['next_offset'] = ret['ar_tot']    
+    if ret['prev_offset'] < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        ret['prev_offset'] = 0
+    
+    ret['ar_start'] = ret['ar_offset'] + 1
+    return ret                                                                                                                                                                                                            
 
 
 @auth.requires_login()
@@ -271,27 +286,32 @@ def choose_analysis_file():
     """
     Offers the user choice of file to analyze
     """
+    ret = dict(app_result_name="", file_info="", file_back="", ar_num="", 
+               ar_back="", err_msg="")
     # get required inputs app result selection and back link
     if ('ar_num' not in request.vars or
         'ar_back' not in request.vars):
-        return dict(app_result_name="", file_info="", file_back="", ar_num="", ar_back="", err_msg="We have a problem - expected AppResult and back link but didn't receive them.")                 
-    
-    ar_num = request.vars['ar_num']                      
-    ar_back = request.vars['ar_back']                    
+        ret['err_msg'] = "We have a problem - expected AppResult and back link but didn't receive them." 
+        return ret                     
+    ret['ar_num'] = request.vars['ar_num']                      
+    ret['ar_back'] = request.vars['ar_back']                    
     
     # create 'back' link    
-    file_back = URL('choose_analysis_file', vars=dict(ar_num=ar_num, ar_back=ar_back))
-                  
+    ret['file_back'] = URL('choose_analysis_file', 
+                           vars=dict(ar_num=ret['ar_num'], 
+                                     ar_back=ret['ar_back']))                  
     # get list of BAM files for this AppResult from BaseSpace
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)
-        app_result = bs_api.getAppResultById(ar_num)
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              session.app_session_num, user_row.access_token)
+        app_result = bs_api.getAppResultById(ret['ar_num'])
         bs_files = app_result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
     except Exception as e:
-        return dict(app_result_name="", file_info="", file_back=file_back, ar_num=ar_num, ar_back=ar_back, err_msg=str(e))     
-    
+        ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
+        return ret         
     # get Sample name from relationship to AppResult for display
     samples = app_result.getReferencedSamples(bs_api)
 
@@ -302,8 +322,7 @@ def choose_analysis_file():
                 
     # construct display name for each BAM file   
     file_info = []    
-    for f in bs_files:      
-        
+    for f in bs_files:          
         # don't allow analysis of files > 5 GB
         large_file = ""
         if (f.Size > 5000000000):     
@@ -311,9 +330,9 @@ def choose_analysis_file():
         file_info.append( { "file_name" : f.Name + " (" + readable_bytes(f.Size) + ")",
                             "file_num" : f.Id,
                             "large_file" : large_file } )                      
-    
-    app_result_name=app_result.Name + " - " + ', '.join(samples_names)    
-    return dict(app_result_name=app_result_name, file_info=file_info, file_back=file_back, ar_num=ar_num, ar_back=ar_back, err_msg="")
+    ret['file_info'] = file_info
+    ret['app_result_name'] = app_result.Name + " - " + ', '.join(samples_names)    
+    return ret
 
 
 @auth.requires_login()
@@ -323,41 +342,47 @@ def confirm_analysis_inputs():
     Offers user form to name analysis (app result name currently).
     Checks that user owns Project that contains input file; if not, uses 'PicardSpace Result' Project, which will be created if it doesn't already exist.
     """
+    ret = dict(sample_name="", file_name="", project_name="", writeback_msg="",
+               ar_num="", file_num="", file_back="", price="", err_msg="") 
+    
     # get file_num and app_result_num that user selected    
     if ('file_num' not in request.vars or
         'ar_num' not in request.vars or
         'file_back' not in request.vars):
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num="", file_num="", file_back="", price="", err_msg="We have a problem - expected File and AppResult info but didn't receive it")
-    
-    file_num = request.vars['file_num']
-    ar_num = request.vars['ar_num']
-    file_back = request.vars['file_back']
-
+        ret['err_msg'] = "We have a problem - expected File and AppResult info but didn't receive it"
+        return ret        
+    ret['file_num'] = request.vars['file_num']
+    ret['ar_num'] = request.vars['ar_num']
+    ret['file_back'] = request.vars['file_back']    
 
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()   
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              session.app_session_num, user_row.access_token)        
         launch_project = bs_api.getProjectById(ssn_row.project_num)
-        input_file = bs_api.getFileById(file_num)
-        app_ssn = bs_api.getAppSession(session.app_session_num)
-
-        app_result = bs_api.getAppResultById(ar_num)
+        input_file = bs_api.getFileById(ret['file_num'])
+        app_result = bs_api.getAppResultById(ret['ar_num'])
         samples_ids = app_result.getReferencedSamplesIds()    
     except Exception as e:
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg=str(e))        
+        ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e) 
+        return ret        
+    ret['file_name'] = input_file.Name
     
     # calculate how much to charge                
     try:        
         prod_purch = ProductPurchase('AlignmentQC')
     except:
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg="Error - creating product purchase: " + str(e))
+        ret['err_msg'] = "Error creating product purchase: " + str(e) 
+        return ret
     try:
-        prod_purch.calc_quantity(file_num, user_row.access_token)
+        prod_purch.calc_quantity(ret['file_num'], user_row.access_token)
     except Exception as e:
-        return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price="", err_msg="Error - calculating product price: " + str(e))                   
-    price = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
+        ret['err_msg'] = "Error calculating product price: " + str(e) 
+        return ret                   
+    ret['price'] = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
     
     # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
     sample_name = "unknown"
@@ -365,28 +390,27 @@ def confirm_analysis_inputs():
         sample_num = samples_ids[0]
         try:
             sample = bs_api.getSampleById(sample_num)
-        except Exception as e:  
-            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price=price, err_msg=str(e))        
-             
-        sample_name = sample.Name               
+        except Exception as e:
+            ret['err_msg'] = "Error retrieving sample from BaseSpace: " + str(e)   
+            return ret                     
+        ret['sample_name'] = sample.Name               
 
     # determine if user owns launch project, if not use 'PicardSpace Results' - won't create new project until after user confirms analysis
     if user_row.username == launch_project.UserOwnedBy.Id:
         # user is owner - assume they want to write back to source project
         try:
             project = bs_api.getProjectById(ssn_row.project_num)
-        except Exception as e:          
-            return dict(sample_name="", file_name="", project_name="", writeback_msg="", ar_num=ar_num, file_num=file_num, file_back=file_back, price=price, err_msg=str(e))        
-        proj_name = project.Name
+        except Exception as e:
+            ret['err_msg'] = "Error retrieving project from BaseSpace: " + str(e)           
+            return ret         
+        ret['project_name'] = project.Name
     else:
-        proj_name = 'PicardSpace Results'
+        ret['project_name'] = 'PicardSpace Results'
 
-    # add writeback message if writing to PicardSpace Results project
-    writeback_msg = ""
-    if proj_name == 'PicardSpace Results':
-        writeback_msg = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
-        
-    return dict(sample_name=str(sample_name), file_name=str(input_file.Name), project_name=proj_name, writeback_msg=writeback_msg, ar_num=ar_num, file_num=file_num, file_back=file_back, price=price, err_msg="")        
+    # add writeback message if writing to PicardSpace Results project    
+    if ret['project_name'] == 'PicardSpace Results':
+        ret['writeback_msg'] = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."    
+    return ret        
 
 
 @auth.requires_login()
@@ -470,7 +494,9 @@ def create_writeback_project():
     user_row = db(db.auth_user.id==auth.user_id).select().first()                    
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              ssn_row.app_session_num, user_row.access_token)
         launch_project = bs_api.getProjectById(ssn_row.project_num)
     except Exception as e:
         return dict(err_msg=str(e))
@@ -486,7 +512,9 @@ def create_writeback_project():
         wb_proj_num = wb_proj.Id
 
     # start oauth to get write project access, then start analysis
-    session.return_url = URL('start_analysis', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num, wb_proj_num=wb_proj_num))
+    session.return_url = URL('start_analysis', vars=dict(
+        ar_name=ar_name, ar_num=ar_num, file_num=file_num, 
+        wb_proj_num=wb_proj_num))
     redirect(URL('get_auth_code', vars=dict(scope='write project ' + str(wb_proj_num))))    
 
 
@@ -536,7 +564,9 @@ def start_analysis():
     user_row = db(db.auth_user.id==auth.user_id).select().first()                    
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, app_ssn_row.app_session_num, user_row.access_token)            
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              app_ssn_row.app_session_num, user_row.access_token)            
         input_app_result = bs_api.getAppResultById(ar_num)
         samples_ids = input_app_result.getReferencedSamplesIds()
     except Exception as e:
@@ -611,70 +641,83 @@ def view_results():
     """
     Main page for logged-in users - shows list of past analyses and option to launch new analysis
     """        
-    # if arriving from just-launched analysis, display msg 'just launched'
-    app_ssns = []
-    message = ""
+    ret = dict(message="", app_ssns=[], ar_start="", ar_end="", ar_tot="", 
+               next_offset="", next_limit="", prev_offset="", prev_limit="", 
+               ar_back="", err_msg="")
+    # if arriving from just-launched analysis, display msg 'just launched'        
     if request.get_vars.message:
-        message = request.get_vars.message    
+        ret['message'] = request.get_vars.message    
         
     # handle pagination vars
-    ar_offset = 0
+    ret['ar_offset'] = 0
     const_ar_limit = 5
-    ar_limit = const_ar_limit
+    ret['ar_limit'] = const_ar_limit
     if request.vars.ar_offset:
-        ar_offset=int(request.vars.ar_offset)
+        ret['ar_offset'] = int(request.vars.ar_offset)
     if request.vars.ar_limit:
-        ar_limit=int(request.vars.ar_limit)    
+        ret['ar_limit'] = int(request.vars.ar_limit)    
 
     # record offset and limit for 'back' link    
-    ar_back = URL('view_results', vars=dict(ar_offset=ar_offset, ar_limit=ar_limit))            
-    
+    ret['ar_back'] = URL('view_results', vars=dict(ar_offset=ret['ar_offset'],
+                                                   ar_limit=ret['ar_limit']))                
     # get BaseSpace API
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     app = db(db.app_data.id > 0).select().first()
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, session.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              session.app_session_num, user_row.access_token)        
     except Exception as e:
-        return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))
-    
+        ret['err_msg'] = "Error getting BaseSpace API object: " + str(e)
+        return ret            
     # get app sessions for the current user, sorted by date created, limited to offset and limit    
-    ssn_rows = db(db.app_session.user_id==auth.user_id).select(limitby=(ar_offset, ar_offset+ar_limit), orderby=~db.app_session.date_created)
+    ssn_rows = db(db.app_session.user_id==auth.user_id).select(limitby=(ret['ar_offset'], ret['ar_offset'] + ret['ar_limit']), orderby=~db.app_session.date_created)
 
     # get total number of app sessions
-    ar_tot = db(db.app_session.user_id==auth.user_id).count()            
+    ret['ar_tot'] = db(db.app_session.user_id==auth.user_id).count()            
     
     # don't allow indexing off end of app_results list
-    ar_end = ar_offset+ar_limit        
-    if ar_end > ar_tot:
-        ar_end = ar_tot                                                    
+    ret['ar_end'] = ret['ar_offset'] + ret['ar_limit']        
+    if ret['ar_end'] > ret['ar_tot']:
+        ret['ar_end'] = ret['ar_tot']                                                    
     
+    app_ssns = []
     for ssn_row in ssn_rows:
         # handling only one app result per app session
         rslt_row = db(db.output_app_result.app_session_id==ssn_row.id).select().first()
         # get project name for each AppResult    
+        ssn_view = {'link_to_results':False, 'app_result_name':'', 
+                    'project_name':'None', 'status':ssn_row.status, 
+                    'app_session_id':ssn_row.id, 'notes':ssn_row.message, 
+                    'date_created':ssn_row.date_created }
         if rslt_row:
             try:
                 proj = bs_api.getProjectById(rslt_row.project_num)
             except Exception as e:
                 # project may have been transfered to another user - list as not accessible
-                app_ssns.append( { 'link_to_results':False, 'app_result_name':'Not Accessible: ' + rslt_row.app_result_name, 'project_name':'Not Accessible', 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )                     
-                #return dict(message=message, app_ssns=app_ssns, ar_start="", ar_end="", ar_tot="", next_offset="", next_limit="", prev_offset="", prev_limit="", ar_back="", err_msg=str(e))                                
+                # - not differentiating between url timeout and missing project
+                ssn_view['link_to_results'] = False
+                ssn_view['app_result_name'] = 'Not Accessible: ' + rslt_row.app_result_name
+                ssn_view['project_name'] = 'Not Accessible'                                                                                
             else:
-                app_ssns.append( { 'link_to_results':True, 'app_result_name':rslt_row.app_result_name, 'project_name':proj.Name, 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
-        else:                 
-            app_ssns.append( { 'link_to_results':False, 'app_result_name':'', 'project_name':'None', 'status':ssn_row.status, 'app_session_id':ssn_row.id, 'notes':ssn_row.message, 'date_created':ssn_row.date_created } )
+                ssn_view['link_to_results'] = True
+                ssn_view['app_result_name'] = rslt_row.app_result_name
+                ssn_view['project_name'] = proj.Name            
+        app_ssns.append(ssn_view)
+    ret['app_ssns'] = app_ssns
                 
     # calculate next and prev start/end                                                                                                                                        
-    next_offset = ar_end
-    next_limit = const_ar_limit    
-    prev_offset = ar_offset - const_ar_limit
-    prev_limit = const_ar_limit                                                                    
-    if next_offset > ar_tot:
-        next_offset = ar_tot    
-    if prev_offset < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
-        prev_offset = 0
-                
-    return dict(message=message, app_ssns=app_ssns, ar_start=ar_offset+1, ar_end=ar_end, ar_tot=ar_tot, next_offset=next_offset, next_limit=next_limit, prev_offset=prev_offset, prev_limit=prev_limit, ar_back=ar_back, err_msg="")
+    ret['next_offset'] = ret['ar_end']
+    ret['next_limit'] = const_ar_limit    
+    ret['prev_offset'] = ret['ar_offset'] - const_ar_limit
+    ret['prev_limit'] = const_ar_limit                                                                    
+    if ret['next_offset'] > ret['ar_tot']:
+        ret['next_offset'] = ret['ar_tot']    
+    if ret['prev_offset'] < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        ret['prev_offset'] = 0
+    
+    ret['ar_start'] = ret['ar_offset'] + 1            
+    return ret
 
     
 @auth.requires_login()
@@ -682,19 +725,19 @@ def view_alignment_metrics():
     """
     Display picard's output from CollectAlignmentMetrics
     """
-    app_session_id = request.get_vars.app_session_id
-    
+    ret = dict(aln_tbl="", hdr="", sample_name="", sample_num="", 
+               input_file_name="", input_project_name="", 
+               input_app_result_name="", output_app_result_name="", 
+               output_project_name="", ar_back="", err_msg="")
+    app_session_id = request.get_vars.app_session_id    
+    ret['aln_tbl'] = [["data not available"]]
+        
     # get 'back' url of view results page
     if (request.vars['ar_back']):
-        ar_back=request.vars['ar_back']
+        ret['ar_back'] = request.vars['ar_back']
     else:
-        ar_back=URL('view_results')
-    
-    # set var defaults
-    hdr = ""
-    aln_tbl = []
-    tps_aln_tbl = [["data not available"]]
-    
+        ret['ar_back'] = URL('view_results')
+        
     # get AppResult from db
     user_row = db(db.auth_user.id==auth.user_id).select().first()
     ssn_row = db(db.app_session.id==app_session_id).select().first()
@@ -705,22 +748,22 @@ def view_alignment_metrics():
                 
     # get Sample and Project from BaseSpace
     try:
-        bs_api = BaseSpaceAPI(app.client_id,app.client_secret,app.baseSpaceUrl,app.version, ssn_row.app_session_num, user_row.access_token)        
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              ssn_row.app_session_num, user_row.access_token)        
         sample = bs_api.getSampleById(output_ar_row.sample_num)        
         output_project = bs_api.getProjectById(output_ar_row.project_num)
         input_project = bs_api.getProjectById(input_ar_row.project_num)
-    except Exception as e:    
-        return(dict(aln_tbl=tps_aln_tbl, 
-            hdr=hdr,
-            sample_name="", 
-            sample_num="",
-            input_file_name="", 
-            input_project_name="", 
-            input_app_result_name="", 
-            output_app_result_name="", 
-            output_project_name="",
-            ar_back=ar_back, 
-            err_msg=str(e)))
+    except Exception as e:
+        ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
+        return ret            
+    ret['sample_name'] = sample.Name 
+    ret['sample_num'] = sample.Id
+    ret['input_file_name'] = input_file_row.file_name 
+    ret['input_project_name'] = input_project.Name 
+    ret['input_app_result_name'] = input_ar_row.app_result_name  
+    ret['output_app_result_name'] = output_ar_row.app_result_name 
+    ret['output_project_name'] = output_project.Name
 
     # get output file info from db    
     f_rows = db(db.output_file.app_result_id==output_ar_row.id).select()
@@ -731,82 +774,51 @@ def view_alignment_metrics():
         if m:
             f_row = row
             break
-
     if f_row:        
         # create file object
         f = File(app_result_id=f_row.app_result_id,
                 file_name=f_row.file_name,
                 local_path=None,
-                file_num=f_row.file_num)
-        
+                file_num=f_row.file_num)        
         # download file from BaseSpace
         if app.scratch_path:
             root_dir = app.scratch_path
         else:                
             root_dir = os.path.join(request.folder, "private")
-        local_dir = os.path.join(root_dir, "downloads", "viewing", str(ssn_row.app_session_num))        
+        local_dir = os.path.join(root_dir, "downloads", "viewing", 
+                                 str(ssn_row.app_session_num))        
         try:
-            local_path = f.download_file(f_row.file_num, local_dir, app_session_id)
+            local_path = f.download_file(f_row.file_num, local_dir, 
+                                         app_session_id)
         except Exception as e:
-            return(dict(aln_tbl=tps_aln_tbl, 
-                hdr=hdr, 
-                sample_name=sample.Name, 
-                sample_num=sample.Id,
-                input_file_name=input_file_row.file_name, 
-                input_project_name=input_project.Name, 
-                input_app_result_name=input_ar_row.app_result_name,  
-                output_app_result_name=output_ar_row.app_result_name, 
-                output_project_name=output_project.Name,
-                ar_back=ar_back, 
-                err_msg=str(e)))
+            ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+            return ret           
         
         # read local file into array (for display in view)
+        aln_tbl = []
         with open( local_path, "r") as ALN_QC:
 
             # get picard output header - collect lines finding line starting with 'CATEGORY'
             line = ALN_QC.readline()
             while not re.match("CATEGORY", line):
-                hdr += line
+                ret['hdr'] += line
                 line = ALN_QC.readline()
-
             # get picard metric data (and table headings)
             aln_tbl.append(line.rstrip().split("\t"))
             for line in ALN_QC:
                 if line.rstrip():
                     aln_tbl.append(line.rstrip().split("\t"))
             ALN_QC.close()
-
             # transpose list (for viewing - so it is long instead of wide)(now its a tuple)
-            tps_aln_tbl = zip(*aln_tbl)
+            ret['aln_tbl'] = zip(*aln_tbl)
             
         # delete local files
         try:
             shutil.rmtree(os.path.dirname(local_path))            
         except Exception as e:
-            return(dict(aln_tbl=tps_aln_tbl, 
-                hdr=hdr, 
-                sample_name=sample.Name, 
-                sample_num=sample.Id,
-                input_file_name=input_file_row.file_name, 
-                input_project_name=input_project.Name, 
-                input_app_result_name=input_ar_row.app_result_name,  
-                output_app_result_name=output_ar_row.app_result_name, 
-                output_project_name=output_project.Name,
-                ar_back=ar_back, 
-                err_msg=str(e)))
-
-    return(dict(aln_tbl=tps_aln_tbl, 
-        hdr=hdr, 
-        sample_name=sample.Name, 
-        sample_num=sample.Id,
-        input_file_name=input_file_row.file_name, 
-        input_project_name=input_project.Name,        
-        input_app_result_name=input_ar_row.app_result_name,  
-        output_app_result_name=output_ar_row.app_result_name, 
-        output_project_name=output_project.Name,
-        ar_back=ar_back, 
-        err_msg=""))
-                
+            ret['err_msg'] = "Error deleting local files: " + str(e)            
+            return ret                
+    return ret
 
 # for user authentication
 def user(): return dict(form=auth())
