@@ -89,15 +89,16 @@ class AnalysisInputFile(File):
             file_row.update_record(local_path=local_file)
             db.commit()               
         
-            # add file to analysis queue                                    
-            current.scheduler.queue_task(analyze_bs_file, 
-                                 pvars = {'input_file_id':self.bs_file_id}, 
-                                 timeout = 86400) # seconds
-
             # update app_session status to 'download complete, in analysis queue'
             ssn_row.update_record(status="queued for analysis", message="download complete")
             db.commit()
-
+        
+            # add file to analysis queue
+            #analyze_bs_file(self.bs_file_id)                              
+            current.scheduler.queue_task(analyze_bs_file, 
+                                 pvars = {'input_file_id':self.bs_file_id}, 
+                                 timeout = 86400) # seconds
+            
 
 class AppResult(object):
     """
@@ -116,7 +117,8 @@ class AppResult(object):
     def run_analysis_and_writeback(self, input_file):
         """
         Run picard on the provided file and writeback output files to BaseSpace, updating statuses as we go
-        """                                    
+        """
+        db = current.db                                    
         # update db and BaseSpace App Session with status
         self.update_status('running', 'picard is running', 'running')
                 
@@ -134,11 +136,17 @@ class AppResult(object):
         message = "analysis and write-back successful"
         if not analysis_success:        
             message = "analysis failed - see stderr.txt; writeback successful"        
-        self.update_status('deleting local files', message)
+        self.update_status('deleting local files', message)    
                 
         # delete local files                        
         shutil.rmtree(os.path.dirname(input_file.local_path))        
         message += "; deleted local files"
+
+        # delete local path from deleted output files in db        
+        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
+        for f_row in f_rows:
+            f_row.update_record(local_path="")
+        db.commit()
 
         # update session status
         status = 'complete'
@@ -257,16 +265,14 @@ class AppResult(object):
         
         # upload files to BaseSpace
         for f in self.output_files:        
-
             # currently not using a dir name to write to
             bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
                 
             # add file to local db
-            bs_file_id = db.output_file.insert(
-                    app_result_id=f.app_result_id,
-                    file_num=bs_file.Id, 
-                    file_name=f.file_name, 
-                    local_path=f.local_path)                                   
+            db.output_file.insert(app_result_id=f.app_result_id,
+                                  file_num=bs_file.Id, 
+                                  file_name=f.file_name, 
+                                  local_path=f.local_path)                                   
             db.commit()
 
 

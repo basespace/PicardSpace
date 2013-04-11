@@ -643,15 +643,16 @@ def start_analysis():
         input_file_id=input_file_id)             
     db.commit()
 
+    # update AppSession status
+    app_ssn_row.update_record(status="queued for download", message="input file added to download queue")
+    db.commit()   
+
     # add BAM File to download queue
+    #download_bs_file(input_file_id)
     scheduler.queue_task(download_bs_file, 
                          pvars = {'input_file_id':input_file_id}, 
                          timeout = 86400) # seconds
-    
-    # update AppSession status
-    app_ssn_row.update_record(status="queued for download", message="input file added to download queue")
-    db.commit()    
-            
+                     
     # everything should now be in db
     clear_session_vars()
 
