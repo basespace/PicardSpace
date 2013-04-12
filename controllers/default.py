@@ -844,5 +844,13 @@ def view_alignment_metrics():
             return ret                
     return ret
 
+
+@auth.requires_login()
+def help_me():
+    """
+    """
+    return dict(bs_url=auth.settings.logout_next)
+
+
 # for user authentication
 def user(): return dict(form=auth())
