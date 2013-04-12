@@ -42,7 +42,7 @@ class File(object):
         # create local_path dir if it doesn't exist   
         if not os.path.exists(local_dir):
             os.makedirs(local_dir)
-
+        
         # write downloaded data to new file
         f.downloadFile(bs_api,local_dir)                        
         return(os.path.join(local_dir, f.Name))
@@ -77,12 +77,16 @@ class AnalysisInputFile(File):
         # download file from BaseSpace
         try:
             local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
-        except Exception as e:
-            print "Error downloading file from BaseSpace: {0}".format(str(e)) # won't reach user
-
-            # update download queue and AppSession status in db            
+        except Exception as e:            
+            # update AppSession status in db and BaseSpace            
             ssn_row.update_record(status='aborted', message=str(e))
-            db.commit()
+            db.commit()            
+            app = db(db.app_data.id > 0).select().first()
+            user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
+            app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
+            message = "Error downloading file from BaseSpace: {0}".format(str(e))            
+            app_ssn.setStatus(bs_api, 'aborted', message[:128])            
         else:
             # update file's local path
             file_row = db(db.input_file.id==self.bs_file_id).select().first()     
