@@ -42,7 +42,7 @@ class File(object):
         # create local_path dir if it doesn't exist   
         if not os.path.exists(local_dir):
             os.makedirs(local_dir)
-        
+                
         # write downloaded data to new file
         f.downloadFile(bs_api,local_dir)                        
         return(os.path.join(local_dir, f.Name))
@@ -75,33 +75,33 @@ class AnalysisInputFile(File):
         local_dir = os.path.join(root_dir, "downloads", "inputs", str(ssn_row.app_session_num))
         
         # download file from BaseSpace
-        try:
-            local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
-        except Exception as e:            
-            # update AppSession status in db and BaseSpace            
-            ssn_row.update_record(status='aborted', message=str(e))
-            db.commit()            
-            app = db(db.app_data.id > 0).select().first()
-            user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
-            app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
-            message = "Error downloading file from BaseSpace: {0}".format(str(e))            
-            app_ssn.setStatus(bs_api, 'aborted', message[:128])            
-        else:
-            # update file's local path
-            file_row = db(db.input_file.id==self.bs_file_id).select().first()     
-            file_row.update_record(local_path=local_file)
-            db.commit()               
-        
-            # update app_session status to 'download complete, in analysis queue'
-            ssn_row.update_record(status="queued for analysis", message="download complete")
-            db.commit()
-        
-            # add file to analysis queue
-            #analyze_bs_file(self.bs_file_id)                              
-            current.scheduler.queue_task(analyze_bs_file, 
-                                 pvars = {'input_file_id':self.bs_file_id}, 
-                                 timeout = 86400) # seconds
+        #try:
+        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
+        #except Exception as e:            
+        #    # update AppSession status in db and BaseSpace            
+        #    ssn_row.update_record(status='aborted', message=str(e))
+        #    db.commit()            
+        #    app = db(db.app_data.id > 0).select().first()
+        #    user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
+        #    bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
+        #    app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
+        #    message = "Error downloading file from BaseSpace: {0}".format(str(e))            
+        #    app_ssn.setStatus(bs_api, 'aborted', message[:128])            
+        #else:
+        # update file's local path
+        file_row = db(db.input_file.id==self.bs_file_id).select().first()     
+        file_row.update_record(local_path=local_file)
+        db.commit()               
+    
+        # update app_session status to 'download complete, in analysis queue'
+        ssn_row.update_record(status="queued for analysis", message="download complete")
+        db.commit()
+    
+        # add file to analysis queue
+        #analyze_bs_file(self.bs_file_id)                              
+        current.scheduler.queue_task(analyze_bs_file, 
+                                     pvars = {'input_file_id':self.bs_file_id}, 
+                                     timeout = 86400) # seconds
             
 
 class AppResult(object):
@@ -384,18 +384,22 @@ def download_bs_file(input_file_id):
         file_name=f_row.file_name,
         local_path=f_row.local_path)
 
-    # download the file from BaseSpace
+    # download the file from BaseSpace and queue analysis
     try:
         als_file.download_and_queue_analysis()
     except Exception as e:            
-        print "Error: {0}".format(str(e))
-
-        # update AppSession status in db        
+        # update AppSession status in db and BaseSpace
         ssn_row.update_record(status='aborted', message=str(e))            
         db.commit()
+        app = db(db.app_data.id > 0).select().first()
+        user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
+        app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
+        message = "Error downloading file from BaseSpace: {0}".format(str(e))            
+        app_ssn.setStatus(bs_api, 'aborted', message[:128])
+        print message # user won't see this            
         # raise exception so queue will record exception and mark job as failed
         raise
-    
     # sanity commit to db for web2py Scheduler
     db.commit()
 
