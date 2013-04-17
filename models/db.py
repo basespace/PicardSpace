@@ -66,6 +66,7 @@ auth.settings.expiration = 3600  # seconds
 
 
 # define global vars
+current.debug_ps = False
 current.aln_metrics_ext = ".AlignmentMetrics.txt"
 current.product_names = {'AlignmentQC':'AlignmentQC'}
 
@@ -268,7 +269,7 @@ db.define_table('purchase',             # purchase made by user
     Field('amount'),
     Field('amount_of_tax'),
     Field('amount_total'),
-    Field('status'),
+    Field('status'),                    # 'PENDING', 'REFUNDED', or 'COMPLETED'
     Field('invoice_number'))
     
 db.define_table('purchased_product',    # product(s) that were bought in a user purchase 

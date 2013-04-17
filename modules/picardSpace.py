@@ -3,6 +3,7 @@
 from gluon import *
 import os.path
 from subprocess import Popen, PIPE
+from datetime import datetime
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 import shutil
 
@@ -24,6 +25,7 @@ class File(object):
         self.file_num = file_num        
         self.bs_file_id = bs_file_id
         self.app_result_id = app_result_id
+
 
     def download_file(self, file_num, local_dir, app_session_id):
         """
@@ -51,7 +53,7 @@ class File(object):
 class AnalysisInputFile(File):
     """
     Class to download, analyze, and write-back results of a single file    
-    """
+    """            
     def download_and_queue_analysis(self):
         """
         Download file contents from BaseSpace and queue the file for analysis
@@ -65,29 +67,12 @@ class AnalysisInputFile(File):
         # update app session status
         ssn_row.update_record(status="downloading")
         db.commit()
+        time_start_download = datetime.now()
         
-        # set local_path location and url for downloading
-        app = db(db.app_data.id > 0).select().first()
-        if app.scratch_path:
-            root_dir = app.scratch_path
-        else:                
-            root_dir = os.path.join(current.request.folder, "private")
-        local_dir = os.path.join(root_dir, "downloads", "inputs", str(ssn_row.app_session_num))
-        
-        # download file from BaseSpace
-        #try:
+        # set local_path location and url for downloading, and download file from BaseSpace        
+        local_dir = AppResult.scratch_path(ssn_row.app_session_num)            
         local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
-        #except Exception as e:            
-        #    # update AppSession status in db and BaseSpace            
-        #    ssn_row.update_record(status='aborted', message=str(e))
-        #    db.commit()            
-        #    app = db(db.app_data.id > 0).select().first()
-        #    user_row = db(db.auth_user.id==ssn_row.user_id).select().first()        
-        #    bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
-        #    app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
-        #    message = "Error downloading file from BaseSpace: {0}".format(str(e))            
-        #    app_ssn.setStatus(bs_api, 'aborted', message[:128])            
-        #else:
+        
         # update file's local path
         file_row = db(db.input_file.id==self.bs_file_id).select().first()     
         file_row.update_record(local_path=local_file)
@@ -96,12 +81,16 @@ class AnalysisInputFile(File):
         # update app_session status to 'download complete, in analysis queue'
         ssn_row.update_record(status="queued for analysis", message="download complete")
         db.commit()
+        time_end_download = datetime.now()
+        time_download = time_end_download - time_start_download 
     
         # add file to analysis queue
-        #analyze_bs_file(self.bs_file_id)                              
-        current.scheduler.queue_task(analyze_bs_file, 
-                                     pvars = {'input_file_id':self.bs_file_id}, 
-                                     timeout = 86400) # seconds
+        #if (current.debug_ps):
+        analyze_bs_file(input_file_id=self.bs_file_id, time_download=time_download)                              
+        #else:
+        #    current.scheduler.queue_task(analyze_bs_file, 
+        #                                 pvars = {'input_file_id':self.bs_file_id, 'time_download':time_download}, 
+        #                                 timeout = 86400) # seconds
             
 
 class AppResult(object):
@@ -116,15 +105,30 @@ class AppResult(object):
         self.app_result_num = app_result_num                    
         
         self.output_files = []           
-            
 
-    def run_analysis_and_writeback(self, input_file):
+    @staticmethod
+    def scratch_path(app_ssn_num):
+        """
+        Return the path to the local working directory for downloading and analysis
+        """
+        db = current.db
+        # set local_path location and url for downloading
+        app = db(db.app_data.id > 0).select().first()
+        if app.scratch_path:
+            root_dir = app.scratch_path
+        else:                
+            root_dir = os.path.join(current.request.folder, "private")
+        return os.path.join(root_dir, "downloads", "inputs", str(app_ssn_num))
+                      
+
+    def run_analysis_and_writeback(self, input_file, time_download=None):
         """
         Run picard on the provided file and writeback output files to BaseSpace, updating statuses as we go
         """
         db = current.db                                    
         # update db and BaseSpace App Session with status
         self.update_status('running', 'picard is running', 'running')
+        time_start_als = datetime.now()
                 
         # run picard                        
         if self._run_picard(input_file):
@@ -133,18 +137,34 @@ class AppResult(object):
         else:
             message = 'analysis failed - see stderr.txt; results not yet written back to BaseSpace'
             analysis_success = False        
-        self.update_status("writing back", message)
+        self.update_status("writing back", message)       
+        time_start_wb = datetime.now()
        
-        # writeback output files            
+        # write-back output files            
         self._writeback_app_result_files()
         message = "analysis and write-back successful"
         if not analysis_success:        
             message = "analysis failed - see stderr.txt; writeback successful"        
         self.update_status('deleting local files', message)    
                 
-        # delete local files                        
-        shutil.rmtree(os.path.dirname(input_file.local_path))        
+        # delete local input and output files
+        os.remove(input_file.local_path)
+        while(len(self.output_files)):
+            f = self.output_files.pop()        
+            os.remove(f.local_path)         
+                
         message += "; deleted local files"
+        time_end_wb = datetime.now()
+
+        # create timing file, write-back to BaseSpace
+        self.writeback_timing(time_download = time_download,
+                              time_analysis = time_start_wb - time_start_als,
+                              time_writeback = time_end_wb - time_start_wb)        
+        
+        # delete scratch path
+        #shutil.rmtree(os.path.dirname(input_file.local_path))
+        ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        shutil.rmtree(self.scratch_path(ssn_row.app_session_num))
 
         # delete local path from deleted output files in db        
         f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
@@ -157,6 +177,32 @@ class AppResult(object):
         if not analysis_success:                    
             status = 'aborted'        
         self.update_status(status, message, status)
+
+
+    def writeback_timing(self, time_download, time_analysis, time_writeback):
+        """
+        Write-back the provided timings (timedelta objects) to a file in BaseSpace
+        """
+        db = current.db
+        time_file = "timing.txt"
+        ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        scratch_path = self.scratch_path(ssn_row.app_session_num)        
+        time_path = os.path.join(scratch_path, time_file)        
+        with open(time_path, "w") as FT:            
+            if time_download:                
+                time_total = time_download + time_analysis + time_writeback
+                FT.write("TOTAL time: " + str(time_total) + "\n")
+                FT.write("Download time: " + str(time_download) + "\n")                
+            FT.write("Analysis time: " + str(time_analysis) + "\n")
+            FT.write("Write-back time: " + str(time_writeback) + "\n")
+        f_time = File(app_result_id=self.app_result_id,
+                      file_name=time_file,
+                      local_path=time_path)        
+        self.output_files.append(f_time)    
+        self._writeback_app_result_files()
+        # remove local file
+        os.remove(time_path)        
+        self.output_files.pop()
             
             
     def status_message(self):
@@ -270,8 +316,7 @@ class AppResult(object):
         # upload files to BaseSpace
         for f in self.output_files:        
             # currently not using a dir name to write to
-            bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')
-                
+            bs_file = app_result.uploadFile(bs_api, f.local_path, f.file_name, '', 'text/plain')                
             # add file to local db
             db.output_file.insert(app_result_id=f.app_result_id,
                                   file_num=bs_file.Id, 
@@ -404,7 +449,7 @@ def download_bs_file(input_file_id):
     db.commit()
 
 
-def analyze_bs_file(input_file_id):
+def analyze_bs_file(input_file_id, time_download=None):
     """
     Analyzes file from BaseSpace -- called from queue
     """
@@ -434,8 +479,7 @@ def analyze_bs_file(input_file_id):
     # run analysis and writeback results to BaseSpace                        
     message = 'None'
     try:                        
-        app_result.run_analysis_and_writeback(input_file) 
-                                           
+        app_result.run_analysis_and_writeback(input_file, time_download)                                            
     except Exception as e:                                
         message = str(e)
         if e.message:

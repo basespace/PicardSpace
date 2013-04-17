@@ -648,10 +648,12 @@ def start_analysis():
     db.commit()   
 
     # add BAM File to download queue
-    #download_bs_file(input_file_id)
-    scheduler.queue_task(download_bs_file, 
-                         pvars = {'input_file_id':input_file_id}, 
-                         timeout = 86400) # seconds
+    if (current.debug_ps):
+        download_bs_file(input_file_id)
+    else:
+        scheduler.queue_task(download_bs_file, 
+                             pvars = {'input_file_id':input_file_id}, 
+                             timeout = 86400) # seconds
                      
     # everything should now be in db
     clear_session_vars()
