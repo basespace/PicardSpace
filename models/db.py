@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
 import os.path    
+import sys
 from urlparse import urlparse
 from gluon import current, HTTP
 from gluon.tools import Auth
 from gluon.scheduler import Scheduler
 from picardSpace import get_auth_code_util, get_access_token_util, download_bs_file, analyze_bs_file
 
-# get database info from local file
-with open (os.path.join(request.folder, "private", 'ticket_storage.txt'), 'r') as DBF:    
-    db = DAL(DBF.readline().strip()) #, fake_migrate_all=True)
+# get database info, from local file if present
+db_info_path = os.path.join(request.folder, 'private', 'ticket_storage.txt')
+if os.path.isfile(db_info_path):
+    try:
+        with open (db_info_path, 'r') as DBF:    
+            db = DAL(DBF.readline().strip()) #, fake_migrate_all=True)
+    except IOError as e:
+        sys.stderr.write("Error opening database info file " + str(e) + "\n")
+        sys.exit(-1)
+else:
+    db=DAL('sqlite://storage.sqlite')
 current.db = db
 
 # instantiate web2py Scheduler
