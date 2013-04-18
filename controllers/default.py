@@ -207,8 +207,9 @@ def choose_analysis_app_result():
     """
     Offers the user choice of AppResult to analyze
     """
-    ret = dict(project_name="", ar_info="", ar_start="", ar_end="", ar_tot="", 
-               next_offset="", next_limit="", prev_offset="", prev_limit="", 
+    ret = dict(bs_url=auth.settings.logout_next, project_name="", ar_info="", 
+               ar_start="", ar_end="", ar_tot="", next_offset="", 
+               next_limit="", prev_offset="", prev_limit="", 
                ar_back="", ar_offset="", ar_limit="", err_msg="")        
     ret['ar_offset'] = 0
     const_ar_limit = 5
