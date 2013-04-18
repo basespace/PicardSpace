@@ -2,3 +2,20 @@
     padding: 15px;
     background-color: #EEE;
 }
+
+.navbar .pull-right {
+    height: 40px;
+    line-height: 40px;
+}
+
+h2 {
+	margin-bottom: 0;
+}
+
+p {
+	margin: 0px 0px 10px 0px;
+}
+
+.alignment-metrics tr:first-child td {
+	font-weight: bold;
+}

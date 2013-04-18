@@ -3,8 +3,7 @@
 
 <p><small><a href="{{=ar_back}}"><i class="icon-arrow-left"></i> AppResults</a></small></p>
 
-<div class="page-header">
-  <h1>Picard Alignment Metrics</h1>
+  <h2>Picard Alignment Metrics</h2>
     <dl class="dl-horizontal">
         <dt>Sample</dt>
         <dd>{{=sample_name}}</dd>
@@ -25,7 +24,6 @@
         <dt>Input Project</dt>
         <dd>{{=input_project_name}}</dd>
     </dl>    
-</div>
 
 <p class="text-error lead">{{=err_msg}}</p>
 
@@ -33,7 +31,7 @@
   <div class="accordion-group">
     <div class="accordion-heading">
       <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseOne">
-        Header
+        Settings Used
       </a>
     </div>
     <div id="collapseOne" class="accordion-body collapse">
@@ -45,4 +43,4 @@
 </div>
 
 
-{{=TABLE(*[TR(*rows) for rows in aln_tbl], _class='table table-bordered table-striped')}}
+{{=TABLE(*[TR(*rows) for rows in aln_tbl], _class='alignment-metrics table table-bordered table-striped')}}

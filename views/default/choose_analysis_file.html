@@ -3,9 +3,7 @@
 
 <p><small><a href="{{=ar_back}}"><i class="icon-arrow-left"></i> Choose AppResult</a></small></p>
 
-<div class="page-header">
-  <h1>Choose File</h1>
-</div>
+<h2>Choose File</h2>
 
 <p class="text-error lead">{{=err_msg}}</p>
 
@@ -16,7 +14,7 @@
 
 <form enctype="multipart/form-data" 
     action="{{=URL('confirm_analysis_inputs')}}" method="get">
-        <legend>Please select a BAM file from AppResult '{{=app_result_name}}':</legend>
+        <h4>Please select a BAM file from AppResult '{{=app_result_name}}':</h4>
                     
     <! -- pre-check first radio button -->    
     {{ first = 0 }}

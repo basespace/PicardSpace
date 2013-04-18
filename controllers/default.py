@@ -345,7 +345,8 @@ def confirm_analysis_inputs():
     Checks that user owns Project that contains input file; if not, uses 'PicardSpace Result' Project, which will be created if it doesn't already exist.
     """
     ret = dict(sample_name="", file_name="", project_name="", writeback_msg="",
-               ar_num="", file_num="", file_back="", price="", err_msg="") 
+               ar_num="", file_num="", file_back="", price="", confirm_msg="", 
+               err_msg="") 
     
     # get file_num and app_result_num that user selected    
     if ('file_num' not in request.vars or
@@ -385,6 +386,11 @@ def confirm_analysis_inputs():
         ret['err_msg'] = "Error calculating product price: " + str(e) 
         return ret                   
     ret['price'] = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
+    
+    if ret['price'] == 0:
+        ret['confirm_msg'] = "Launch Analysis"
+    else:
+        ret['confirm_msg'] = "Checkout..."
     
     # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
     sample_name = "unknown"

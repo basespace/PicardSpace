@@ -9,23 +9,50 @@
   
   <form enctype="multipart/form-data"
       action="{{=URL('start_billing')}}" method="post">
-    <legend>Would you like to analyze this Sample?</legend>
-    <label>Sample: {{=sample_name}}</label>
-    <label>File: {{=file_name}}</label>
-    <label>Output Project: {{=project_name}} 
-      {{ if writeback_msg != "": }}
-        <small><a href="#" data-toggle="collapse" data-target="#writeback">(see details)</a></small>
-      {{pass}}
-    </label>        
-    <label>New AppResult name:</label>
-    <input type="text" name="ar_name" value="Picard Aln Metrics for {{=sample_name}}" />
-    <label>Price before tax: {{=price}} iCredits</label>
-
-    <input type="hidden" name="ar_num" value="{{=ar_num}}">
+  	<input type="hidden" name="ar_num" value="{{=ar_num}}">
     <input type="hidden" name="file_num" value="{{=file_num}}">
+      
+    <h4>Would you like to analyze this Sample?</h4>
     
-    <br/>
-    <button type="submit" class="btn btn-primary btn-large">Launch Analysis</button>
+    <div class="row">
+    	<span class="span5">
+	    	<table class="table table-bordered table-striped">
+	    	<tr>
+	    		<th>Sample:</th>
+	    		<td>{{=sample_name}}</td>
+	    	</tr>
+	    	<tr>
+	    		<th>File:</th>
+	    		<td>{{=file_name}}</td>
+	    	</tr>
+	    	<tr>
+	    		<th>Output Project:</th>
+	    		<td>
+	    		{{=project_name}} 
+			      {{ if writeback_msg != "": }}
+			        <small><a href="#" data-toggle="collapse" data-target="#writeback">(see details)</a></small>
+			      {{pass}}</td>
+	    	</tr>
+	    	<tr>
+	    		<th>New AppResult name:</th>
+	    		<td>
+	    			<input type="text" name="ar_name" value="Picard Aln Metrics for {{=sample_name}}" />
+	    		</td>
+	    	</tr>
+	    	<tr>
+	    		<th>Price before tax:</th>
+	    		<td>{{=price}} iCredits</td>
+	    	</tr>
+	    </table>
+	    
+    	</span>
+    </div>
+    <div class="row">
+    
+    	<span class="span5">
+    	    <button type="submit" class="btn btn-primary btn-large">{{=confirm_msg}}</button>
+    	</span>
+   	</div>    
   </form>
 
   <div id="writeback" class="collapse text-info">{{=writeback_msg}}</div>   
