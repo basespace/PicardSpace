@@ -329,7 +329,7 @@ class ProductPurchase(object):
     """
     A product that a user may purchase
     """
-    def __init__(self, prod_name):
+    def __init__(self, prod_name, tags=[]):
         """
         Initialize product with price and num from db
         """              
@@ -337,13 +337,14 @@ class ProductPurchase(object):
         prod_row = db(db.product.name==prod_name).select().first()
         if not prod_row:
             raise UnrecognizedProductException(prod_name)
-        self.prod_name=prod_name
-        self.prod_id=prod_row.id
-        self.prod_price=prod_row.price
-        self.prod_num=prod_row.num
-        self.file_num=None
-        self.amount=None
-        self.prod_quantity=None
+        self.prod_name = prod_name
+        self.tags = tags
+        self.prod_id = prod_row.id
+        self.prod_price = prod_row.price
+        self.prod_num = prod_row.num
+        self.file_num = None
+        self.amount = None
+        self.prod_quantity = None
 
     def calc_quantity(self, file_num, access_token):
         """

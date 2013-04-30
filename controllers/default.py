@@ -76,7 +76,7 @@ def handle_redirect_uri():
             session.return_url = URL('user_now_logged_in')            
             redirect( URL('user', args=['login']) )
  
-        # handle case: just launched from BaseSpace
+        # handle case: completed purchase in BaseSpace
         elif (request.get_vars.action == 'purchase'):            
             if not request.get_vars.purchaseid:
                 return dict(err_msg="Error: purchase from BaseSpace not accompanied by a purchase id")
@@ -388,7 +388,7 @@ def confirm_analysis_inputs():
     ret['price'] = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
     
     if ret['price'] == 0:
-        ret['confirm_msg'] = "Launch Analysis"
+        ret['confirm_msg'] = "Make It So"
     else:
         ret['confirm_msg'] = "Checkout..."
     
@@ -448,7 +448,8 @@ def start_billing():
     
     # calculate how much to charge
     try:        
-        prod_purch = ProductPurchase('AlignmentQC')
+        # add tags to this purchase as an example
+        prod_purch = ProductPurchase('AlignmentQC', ['tag1','tag2'])
     except:
         return dict(err_msg="Error creating product purchase: " + str(e))
     try:
@@ -459,12 +460,15 @@ def start_billing():
     # create purchase, if not free
     if prod_purch.prod_quantity != 0:                    
         try:
-            purchase = store_api.createPurchase({'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity})
+            purchase = store_api.createPurchase(
+                {'id':prod_purch.prod_num, 'quantity':prod_purch.prod_quantity,
+                'tags':prod_purch.tags }, session.app_session_num)
         except Exception as e:
             return dict(err_msg="Error creating purchase: " + str(e))        
         # capture url for user to view BaseSpace billing dialog
         if not purchase.HrefPurchaseDialog:
             return dict(err_msg="There was a problem getting billing information from BaseSpace")
+        refund_secret = purchase.RefundSecret
         purchase_num = purchase.Id
         date_created = purchase.DateCreated
         amount = purchase.Amount
@@ -475,6 +479,7 @@ def start_billing():
         session.return_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
     else:
         # free analysis
+        refund_secret = "none"
         purchase_num = "none"
         date_created = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         amount = 0
@@ -485,17 +490,20 @@ def start_billing():
         
     # record purchase in db
     ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()    
-    purchase_id = db.purchase.insert(purchase_num=purchase_num,
-                                     app_session_id=ssn_row.id,
-                                     date_created=date_created,
-                                     amount=amount,
-                                     amount_of_tax=amount_of_tax,    
-                                     amount_total=amount_total,
-                                     status=status)    
-    db.purchased_product.insert(purchase_id=purchase_id,
-                                product_id=prod_purch.prod_id,
-                                quantity=prod_purch.prod_quantity,
-                                prod_price=prod_purch.prod_price)                    
+    purchase_id = db.purchase.insert(purchase_num = purchase_num,
+                                     app_session_id = ssn_row.id,
+                                     date_created = date_created,
+                                     amount = amount,
+                                     amount_of_tax = amount_of_tax,    
+                                     amount_total = amount_total,
+                                     status = status,
+                                     refund_secret = refund_secret,
+                                     access_token = user_row.access_token)    
+    db.purchased_product.insert(purchase_id = purchase_id,
+                                product_id = prod_purch.prod_id,
+                                quantity = prod_purch.prod_quantity,
+                                prod_price = prod_purch.prod_price,
+                                tags = prod_purch.tags)                    
     db.commit()
     # set purchase id now that purchase is in db (or free)
     if prod_purch.prod_quantity != 0:

@@ -279,11 +279,14 @@ db.define_table('purchase',             # purchase made by user
     Field('amount_of_tax'),
     Field('amount_total'),
     Field('status'),                    # 'PENDING', 'REFUNDED', or 'COMPLETED'
+    Field('refund_secret'),
+    Field('access_token'),              # the token used to make this purchase, reqd for refunds
     Field('invoice_number'))
     
 db.define_table('purchased_product',    # product(s) that were bought in a user purchase 
     Field('purchase_id', db.purchase),
     Field('product_id', db.product),
     Field('quantity'),
-    Field('prod_price'))                # price of product for this purchase (product price can change over time)
+    Field('prod_price'),                # price of product for this purchase (product price can change over time)
+    Field('tags', 'list:string'))
     
