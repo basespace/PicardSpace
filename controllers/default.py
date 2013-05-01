@@ -76,7 +76,7 @@ def handle_redirect_uri():
             session.return_url = URL('user_now_logged_in')            
             redirect( URL('user', args=['login']) )
  
-        # handle case: completed purchase in BaseSpace
+        # handle purchases returning from BaseSpace
         elif (request.get_vars.action == 'purchase'):            
             if not request.get_vars.purchaseid:
                 return dict(err_msg="Error: purchase from BaseSpace not accompanied by a purchase id")
@@ -96,12 +96,19 @@ def handle_redirect_uri():
             except:
                 return dict(err_msg=str(e))                                
             
-            # check that purchase was paid in BaseSpace
+            # check purchase status in BaseSpace
             try:
-                if purch.Status != 'COMPLETED':
-                    return dict(err_msg="Error: purchase was not completed in BaseSpace")
+                if purch.Status == 'CANCELLED':
+                    redirect(URL('view_results', vars=dict(message='Your Analysis Was Canceled')))                
             except AttributeError:
                 return dict(err_msg="Error: purchase does not have a status")
+            if purch.Status == 'ERRORED':
+                return dict(err_msg="Error: there was a purchase error in BaseSpace. Please return to BaseSpace and re-launch the app.")                
+            if purch.Status == 'PENDING':
+                redirect(URL('view_results', vars=dict(message='The purchase for your analysis is Pending in BaseSpace. Analysis has not started.')))                
+            if purch.Status != 'COMPLETED':
+                return dict(err_msg="Error: purchase was not completed in BaseSpace")
+            
             
             # record invoice number and set purchase status to paid in db
             try:
