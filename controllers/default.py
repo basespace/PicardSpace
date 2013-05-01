@@ -718,11 +718,16 @@ def view_results():
     except Exception as e:
         ret['err_msg'] = "Error getting BaseSpace API object: " + str(e)
         return ret            
-    # get app sessions for the current user, sorted by date created, limited to offset and limit    
-    ssn_rows = db(db.app_session.user_id==auth.user_id).select(limitby=(ret['ar_offset'], ret['ar_offset'] + ret['ar_limit']), orderby=~db.app_session.date_created)
+    # get app sessions that have analyses for the current user, 
+    # sorted by date created, limited to offset and limit    
+    ssn_rows = db((db.app_session.status != 'newly created') 
+        & (db.app_session.user_id==auth.user_id)).select(
+        limitby=(ret['ar_offset'], ret['ar_offset'] + ret['ar_limit']),
+        orderby=~db.app_session.date_created)
 
-    # get total number of app sessions
-    ret['ar_tot'] = db(db.app_session.user_id==auth.user_id).count()            
+    # get total number of app sessions with analyses
+    ret['ar_tot'] = db((db.app_session.status != 'newly created') 
+        & (db.app_session.user_id==auth.user_id)).count()            
     
     # don't allow indexing off end of app_results list
     ret['ar_end'] = ret['ar_offset'] + ret['ar_limit']        
