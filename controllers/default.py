@@ -99,16 +99,17 @@ def handle_redirect_uri():
             # check purchase status in BaseSpace
             try:
                 if purch.Status == 'CANCELLED':
+                    p_row.update_record(status='cancelled')
                     redirect(URL('view_results', vars=dict(message='Your Analysis Was Canceled')))                
             except AttributeError:
                 return dict(err_msg="Error: purchase does not have a status")
             if purch.Status == 'ERRORED':
+                p_row.update_record(status='errored')
                 return dict(err_msg="Error: there was a purchase error in BaseSpace. Please return to BaseSpace and re-launch the app.")                
             if purch.Status == 'PENDING':
                 redirect(URL('view_results', vars=dict(message='The purchase for your analysis is Pending in BaseSpace. Analysis has not started.')))                
             if purch.Status != 'COMPLETED':
-                return dict(err_msg="Error: purchase was not completed in BaseSpace")
-            
+                return dict(err_msg="Error: purchase was not completed in BaseSpace")            
             
             # record invoice number and set purchase status to paid in db
             try:
