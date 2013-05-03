@@ -704,7 +704,8 @@ def start_analysis():
     else:
         scheduler.queue_task(download_bs_file, 
                              pvars = {'input_file_id':input_file_id}, 
-                             timeout = 86400) # seconds
+                             timeout = 86400, # seconds
+                             immediate = True)
                      
     # everything should now be in db
     clear_session_vars()
