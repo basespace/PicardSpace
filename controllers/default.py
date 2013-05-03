@@ -200,32 +200,40 @@ def user_now_logged_in():
     else:            
         # an app session num was provided, update app session with user info
         ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
-        ssn_row.update_record(user_id=auth.user_id)
-        
-        # determine if user own's launch project                   
-        user_row = db(db.auth_user.id==auth.user_id).select().first()                    
-        app = db(db.app_data.id > 0).select().first()
-        try:
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
-                                  app.baseSpaceUrl, app.version, 
-                                  ssn_row.app_session_num, user_row.access_token)
-            launch_project = bs_api.getProjectById(ssn_row.project_num)
-        except Exception as e:
-            # TODO add view for errors
-            return dict(err_msg=str(e))                    
-        if user_row.username == launch_project.UserOwnedBy.Id:
-            # if the user own the launch Project, ask for write permission to it (for writeback)
-            proj_perm = "write"
-        else:
-            # otherwise, as read access, since we'll write back to PicardSpace_Results project (ask for perms just before analysis)
-            proj_perm = "read"                                       
-        # start oauth, with permission to Read (or Write) the launch Project 
-        # and create new Projects, if needed, for writeback
+        ssn_row.update_record(user_id=auth.user_id)                                                                                
+        # start oauth, with permission to:
+        # 1. Read (and Browse) the launch Project 
+        # 2. Create new Projects, if needed, for writeback
         # (using Read Project instead of Browse due to bug in Browsing File metadata)
         # (using Browse Global to browse Samples from input AppResult that are in different Projects)
-        scope = 'create projects, browse global, %s project %s' % (lproj_perm, str(ssn_row.project_num))        
+        scope = 'create projects, browse global, read project %s' % (str(ssn_row.project_num))        
+        session.return_url = URL('request_proj_write_if_owned')
+        redirect(URL('get_auth_code', vars=dict(scope=scope)))
+
+
+@auth.requires_login()
+def request_proj_write_if_owned():
+    """
+    If the user owns the launch project, request write access (so no oauth dialogs after billing)
+    If not, wait until after billing to create writeback project and request write access to it
+    """                        
+    # determine if user own's launch project
+    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()                   
+    user_row = db(db.auth_user.id==auth.user_id).select().first()                    
+    app = db(db.app_data.id > 0).select().first()
+    try:
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+                              app.baseSpaceUrl, app.version, 
+                              ssn_row.app_session_num, user_row.access_token)
+        launch_project = bs_api.getProjectById(ssn_row.project_num)
+    except Exception as e:
+        # TODO add view for errors
+        return dict(err_msg=str(e))                    
+    if user_row.username == launch_project.UserOwnedBy.Id:                
         session.return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
-        redirect(URL('get_auth_code', vars=dict(scope=scope)))        
+        redirect(URL('get_auth_code', vars=dict(scope='write project %s' % (str(ssn_row.project_num)))))
+    else:
+        redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
 
 
 @auth.requires_login()
