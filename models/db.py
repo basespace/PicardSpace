@@ -278,7 +278,9 @@ db.define_table('purchase',             # purchase made by user
     Field('amount'),
     Field('amount_of_tax'),
     Field('amount_total'),
-    Field('status'),                    # 'PENDING', 'REFUNDED', or 'COMPLETED'
+    Field('status'),
+    Field('refund_status'),             # default is 'NOTREFUNDED', set to 'COMPLETED' when purchase is refunded
+    Field('refund_comment'),            # used only (optionally) during refunds
     Field('refund_secret'),
     Field('access_token'),              # the token used to make this purchase, reqd for refunds
     Field('invoice_number'))

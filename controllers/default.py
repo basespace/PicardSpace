@@ -532,6 +532,8 @@ def start_billing():
                                      amount_of_tax = amount_of_tax,    
                                      amount_total = amount_total,
                                      status = status,
+                                     refund_status = "NOTREFUNDED",
+                                     refund_comment = "",
                                      refund_secret = refund_secret,
                                      access_token = user_row.access_token)    
     db.purchased_product.insert(purchase_id = purchase_id,
