@@ -360,10 +360,8 @@ class ProductPurchase(object):
         
             if input_file.Size < 100000000: # <100 MB
                 self.prod_quantity = 0
-            elif input_file.Size < 1000000000: # <1 GB
-                self.prod_quantity = 5
-            else:                           # >1 GB
-                self.prod_quantity = 10       
+            else:
+                self.prod_quantity = 1                                   
         else:
             raise UnrecognizedProductException(self.prod_name)
 
