@@ -656,8 +656,8 @@ def start_analysis():
         except Exception as e:
             return dict(err_msg=str(e))
             
-    # clean app result name - only allow alpha, numeric, and a few symbols
-    ar_name = re.sub("[^a-zA-Z0-9_.,()\[\]+-]", "", ar_name.strip())        
+    # clean app result name - only allow alpha, numeric, spaces, and a few symbols
+    ar_name = re.sub("[^ a-zA-Z0-9_.,()\[\]+-]", "", ar_name.strip())        
     if not ar_name:
         ar_name = 'PicardSpace Result'
             
