@@ -33,8 +33,8 @@ def handle_redirect_uri():
     """    
     # handle api errors
     if request.get_vars.error:
-        err_msg = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_message)
-        return dict(err_msg=err_msg)                    
+        err_msg = "Error - " + str(request.get_vars.error) + ": " + str(request.get_vars.error_description)
+        return dict(err_msg=err_msg)
 
     if request.get_vars.action:  
         # handle case: just launched from BaseSpace
