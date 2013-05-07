@@ -70,7 +70,7 @@ class AnalysisInputFile(File):
         time_start_download = datetime.now()
         
         # set local_path location and url for downloading, and download file from BaseSpace        
-        local_dir = AppResult.scratch_path(ssn_row.app_session_num)            
+        local_dir = AppResult.scratch_path(ssn_row.app_session_num)        
         local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
         
         # update file's local path
@@ -111,14 +111,7 @@ class AppResult(object):
         """
         Return the path to the local working directory for downloading and analysis
         """
-        db = current.db
-        # set local_path location and url for downloading
-        app = db(db.app_data.id > 0).select().first()
-        if app.scratch_path:
-            root_dir = app.scratch_path
-        else:                
-            root_dir = os.path.join(current.request.folder, "private")
-        return os.path.join(root_dir, "downloads", "inputs", str(app_ssn_num))
+        return os.path.join(current.scratch_path, "inputs", str(app_ssn_num))        
                       
 
     def run_analysis_and_writeback(self, input_file, time_download=None):
@@ -164,7 +157,7 @@ class AppResult(object):
         # delete scratch path
         #shutil.rmtree(os.path.dirname(input_file.local_path))
         ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-        shutil.rmtree(self.scratch_path(ssn_row.app_session_num))
+        shutil.rmtree(self.scratch_path(ssn_row.app_session_num))        
 
         # delete local path from deleted output files in db        
         f_rows = db(db.output_file.app_result_id==self.app_result_id).select()

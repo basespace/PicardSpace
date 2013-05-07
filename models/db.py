@@ -2,6 +2,7 @@
 import os.path    
 import sys
 from urlparse import urlparse
+from ConfigParser import ConfigParser
 from gluon import current, HTTP
 from gluon.tools import Auth
 from gluon.scheduler import Scheduler
@@ -19,6 +20,21 @@ if os.path.isfile(db_info_path):
 else:
     db=DAL('sqlite://storage.sqlite')
 current.db = db
+
+# get settings from local file
+settings_path = os.path.join(request.folder, 'private', 'PicardSpaceSettings.txt')
+if os.path.isfile(settings_path):
+    try:
+        config = ConfigParser()
+        config.read(settings_path)        
+    except IOError as e:
+        sys.stderr.write("Error opening PicardSpace settings file " + str(e) + "\n")
+        sys.exit(-1)
+    current.genomes_path = config.get('PicardSpaceSettings', 'genomes_path')
+    current.scratch_path = config.get('PicardSpaceSettings', 'scratch_path')
+else:
+    current.genomes_path = os.path.join(request.folder, 'private', 'genomes')
+    current.scratch_path = os.path.join(request.folder, 'private', 'downloads')
 
 # instantiate web2py Scheduler
 scheduler = Scheduler(db, heartbeat=1) # override heartbeat to check for tasks every 1 sec (instead of 3 secs)
@@ -90,8 +106,7 @@ db.define_table('app_data',
     Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),    
     Field('redirect_uri', default='http://localhost:8000/PicardSpace/default/handle_redirect_uri'),
     Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
-    Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'),
-    Field('scratch_path'))
+    Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'))
 
 # create an instance of app_data table if not present
 app_data = db(db.app_data.id > 0).select().first()

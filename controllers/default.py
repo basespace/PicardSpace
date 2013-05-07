@@ -864,12 +864,7 @@ def view_alignment_metrics():
                 local_path=None,
                 file_num=f_row.file_num)        
         # download file from BaseSpace
-        if app.scratch_path:
-            root_dir = app.scratch_path
-        else:                
-            root_dir = os.path.join(request.folder, "private")
-        local_dir = os.path.join(root_dir, "downloads", "viewing", 
-                                 str(ssn_row.app_session_num))        
+        local_dir = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num))        
         try:
             local_path = f.download_file(f_row.file_num, local_dir, 
                                          app_session_id)
