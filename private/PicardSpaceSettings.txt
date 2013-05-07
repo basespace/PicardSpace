@@ -1,4 +1,0 @@
-[PicardSpaceSettings]
-genomes_path = /home/esmith/genomes_PicardSpace
-scratch_path = /home/esmith/workspace/web2py_2.4.5/applications/PicardSpace/private/downloads
-
