@@ -41,7 +41,7 @@
 	    	</tr>
 	    	<tr>
 	    		<th>Price before tax:</th>
-	    		<td>{{=price}} iCredits</td>
+	    		<td>{{=price}} {{ if price == 1: }}iCredit{{ else: }}iCredits{{pass}}</td>
 	    	</tr>
 	    </table>
 	    
