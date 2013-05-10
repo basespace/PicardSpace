@@ -41,6 +41,14 @@
   </div> <!-- /container -->
 
   <script src="{{=URL('static','js/bootstrap.min.js')}}"></script>  
+
+  {{if response.google_analytics_id:}}
+    <script src="{{=URL('static','js/analytics.min.js')}}"></script>
+    <script type="text/javascript">
+      analytics.initialize({
+        'Google Analytics':{trackingId:'{{=response.google_analytics_id}}'} 
+    });</script>
+  {{pass}}
     
 </body>
 </html>

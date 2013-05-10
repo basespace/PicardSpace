@@ -51,6 +51,9 @@ session.connect(request, response, db)
 ## none otherwise. a pattern can be 'controller/function.extension'
 response.generic_patterns = ['*'] if request.is_local else []
 
+## your http://google.com/analytics id
+response.google_analytics_id = None
+
 # define authentication table and setting
 auth = Auth(db)
 
