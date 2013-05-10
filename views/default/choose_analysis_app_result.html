@@ -13,36 +13,41 @@
 		     
 		<form enctype="multipart/form-data" 
 		    action="{{=URL('choose_analysis_file')}}" method="get">
-		        <h4>Please select an AppResult from Project '{{=project_name}}':</h4>
 		    
-		    <! -- pre-check first radio button -->    
-		    {{ first = 0 }}
-		    {{for ar in ar_info:}}
-		        <label class="radio">
-		            <input type="radio" name="ar_num" id="{{=ar['app_result_name']}}" value="{{=ar['app_result_num']}}" {{ if first == 0:}}checked{{pass}}>
-		            {{=ar['app_result_name']}}
-		            {{ first+=1 }}
-		        </label>
+		    {{if len(ar_info) == 0:}}
+		        <p class="text-error">There are no App Results in Project '{{=project_name}}'. Please return to <a href="{{=bs_url}}">BaseSpace</a> and choose a different Project.</p>
+		    {{else:}}		    
+		        <h4>Please select an AppResult from Project '{{=project_name}}':</h4>
+		    		    
+			    <! -- pre-check first radio button -->    
+			    {{ first = 0 }}
+			    {{for ar in ar_info:}}
+			        <label class="radio">
+			            <input type="radio" name="ar_num" id="{{=ar['app_result_name']}}" value="{{=ar['app_result_num']}}" {{ if first == 0:}}checked{{pass}}>
+			            {{=ar['app_result_name']}}
+			            {{ first+=1 }}
+			        </label>
+			    {{pass}}		   
+			
+			        <!-- pass back url of this page -->
+			        <input type="hidden" name="ar_back" value="{{=ar_back}}">
+			                
+			        <!-- horizontal divider -->
+			        <ul class = "nav nav-list">
+			            <li class="divider"></li>
+			        </ul>        
+			        <p>
+			            {{if ar_start > 1:}}
+			            <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=prev_offset, ar_limit=prev_limit))}}"><i class="icon-arrow-left"></i></a> 
+			            {{pass}}
+			            {{=ar_start}} - {{=ar_end}} of {{=ar_tot}} 
+			            {{if ar_end < ar_tot:}}
+			            <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=next_offset, ar_limit=next_limit))}}"><i class="icon-arrow-right"></i></a>
+			            {{pass}}        
+			        </p>
+			    <br/>
+			    <button type="submit" class="btn btn-primary">Next...</button>
 		    {{pass}}
-		
-		        <!-- pass back url of this page -->
-		        <input type="hidden" name="ar_back" value="{{=ar_back}}">
-		                
-		        <!-- horizontal divider -->
-		        <ul class = "nav nav-list">
-		            <li class="divider"></li>
-		        </ul>        
-		        <p>
-		            {{if ar_start > 1:}}
-		            <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=prev_offset, ar_limit=prev_limit))}}"><i class="icon-arrow-left"></i></a> 
-		            {{pass}}
-		            {{=ar_start}} - {{=ar_end}} of {{=ar_tot}} 
-		            {{if ar_end < ar_tot:}}
-		            <a href="{{=URL('choose_analysis_app_result', vars=dict(ar_offset=next_offset, ar_limit=next_limit))}}"><i class="icon-arrow-right"></i></a>
-		            {{pass}}        
-		        </p>
-		    <br/>
-		    <button type="submit" class="btn btn-primary">Next...</button>
 		</form>
 	</div>
 	<div class="span3">	    	
