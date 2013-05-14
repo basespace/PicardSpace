@@ -68,7 +68,7 @@ def handle_redirect_uri():
             # create app_session in db
             db.app_session.insert(app_session_num=session.app_session_num,
                 project_num=project_num,
-                date_created=app_ssn.DateCreated,
+                date_created=str(app_ssn.DateCreated),
                 status="newly created",
                 message="newly launched App Session - no analysis performed yet")
             
@@ -300,7 +300,7 @@ def choose_analysis_app_result():
         samples_names = []
         for s in samples:
             samples_names.append(s.Name)          
-        ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + ar.DateCreated,
+        ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + str(ar.DateCreated),
                           "app_result_num" : ar.Id } )                                                  
     ret['ar_info'] = ar_info
     
@@ -509,7 +509,7 @@ def start_billing():
             return dict(err_msg="There was a problem getting billing information from BaseSpace")
         refund_secret = purchase.RefundSecret
         purchase_num = purchase.Id
-        date_created = purchase.DateCreated
+        date_created = str(purchase.DateCreated)
         amount = purchase.Amount
         amount_of_tax = purchase.AmountOfTax   
         amount_total = purchase.AmountTotal
