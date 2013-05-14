@@ -84,7 +84,7 @@ class AnalysisInputFile(File):
         db.commit()
         time_end_download = datetime.now()
         time_download = time_end_download - time_start_download 
-    
+
         # add file to analysis queue
         #if (current.debug_ps):
         analyze_bs_file(input_file_id=self.bs_file_id, time_download=time_download)                              
@@ -439,16 +439,17 @@ def download_bs_file(input_file_id):
         print message # user won't see this
         
         # perform refund if user paid for analysis
-        store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)   
         pr_row = db(db.purchase.app_session_id==ssn_row.id).select().first()
-        if pr_row.refund_status == 'NOTREFUNDED':
-            comment = 'Automatic refund was triggered by a PicardSpace error'
-            store_api.refundPurchase(pr_row.purchase_num, pr_row.refund_secret, 
-                                     comment=comment)
-            # set local refund status to 'COMPLETED' and update ssn status msg
-            pr_row.update_record(refund_status='COMPLETED', comment=comment)
-            ssn_row.update_record(message="[Purchase Refunded] " + str(e))            
-            db.commit()                                            
+        if pr_row.amount_total > 0:
+            store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)           
+            if pr_row.refund_status == 'NOTREFUNDED':
+                comment = 'Automatic refund was triggered by a PicardSpace error'
+                store_api.refundPurchase(pr_row.purchase_num, pr_row.refund_secret, 
+                                         comment=comment)
+                # set local refund status to 'COMPLETED' and update ssn status msg
+                pr_row.update_record(refund_status='COMPLETED', comment=comment)
+                ssn_row.update_record(message="[Purchase Refunded] " + str(e))            
+                db.commit()                                            
         # raise exception so queue will record exception and mark job as failed
         raise
     # sanity commit to db for web2py Scheduler
