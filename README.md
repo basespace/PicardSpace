@@ -1,7 +1,7 @@
 PicardSpace
 ===========
 
-A website that runs Picard tools for BaseSpace.
+A sample website that runs Picard tools for BaseSpace using the BaseSpace API.
 
 
 Setup
