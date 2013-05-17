@@ -1,7 +1,9 @@
 PicardSpace
 ===========
 
-A website that runs Picard tools for BaseSpace.
+PicardSpace is a sample web application for BaseSpace that calculates alignment metrics with the open-source tool Picard. It runs Picard's CollectAlignmentSummaryMetrics program on a BAM file.
+
+Below are instructions for setting up a local installation of PicardSpace. A web server will run on your local machine and communicate with BaseSpace via the BaseSpace API. Analyses will run on your local machine and output files will be written back to BaseSpace.
 
 
 Setup
