@@ -20,12 +20,13 @@ class File(object):
     """
     A File in BaseSpace
     """
-    def __init__(self, file_name, local_path, file_num=None, bs_file_id=None, app_result_id=None):              
+    def __init__(self, file_name, local_path, file_num=None, bs_file_id=None, app_result_id=None, genome_id=None):              
         self.file_name = file_name
         self.local_path = local_path
         self.file_num = file_num        
         self.bs_file_id = bs_file_id
         self.app_result_id = app_result_id
+        self.genome_id = genome_id
 
 
     def download_file(self, file_num, local_dir, app_session_id):
@@ -237,59 +238,135 @@ class AppResult(object):
         
     def _run_picard(self, input_file):    
         """
-        Run picard's CollectAlignmentSummaryMetics on a BAM file       
+        Run picard tools on a BAM file       
         """                
+        retval = self._collect_alignment_metrics(input_file)
+        retval2 = self._collect_gc_bias_metrics(input_file)
+        
+        return(retval and retval2)
+
+
+    def _collect_alignment_metrics(self, input_file):    
+        """
+        Run picard's CollectAlignmentSummaryMetrics on a BAM file       
+        """
         input_path = input_file.local_path
         db = current.db                
-        app = db(db.app_data.id > 0).select().first()
-
+        app = db(db.app_data.id > 0).select().first()                
+                
+        # assemble output file names and paths                                                                    
+        outpath_txt = input_path + current.file_ext['aln_txt']
+        outpath_stdout = input_path + current.file_ext['aln_stdout']
+        outpath_stderr = input_path + current.file_ext['aln_stderr']
+        
         # assemble picard command and run it
-        (dirname, file_name) = os.path.split(input_path)        
-        aln_met_name = file_name + current.aln_metrics_ext
-        output_path = os.path.join(dirname, aln_met_name)
-        
-        command = ["java", "-jar", 
-            os.path.join(current.request.folder, app.picard_exe),
+        jar = os.path.join(app.picard_exe, "CollectAlignmentSummaryMetrics.jar")
+        command = ["java", "-jar", "-Xms2G",
+            os.path.join(current.request.folder, jar),
             "INPUT=" + input_path, 
-            "OUTPUT=" + output_path, 
+            "OUTPUT=" + outpath_txt, 
             "VALIDATION_STRINGENCY=LENIENT",
-            "ASSUME_SORTED=true"]
-        p = Popen(command, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = p.communicate()        
-    
-        # add output file to writeback list, if output file has non-zero size
-        if (os.path.exists(output_path) and os.path.getsize(output_path)):           
-            f = File(app_result_id=self.app_result_id,
-                file_name=aln_met_name,
-                local_path=output_path)
-            self.output_files.append(f)
+            "ASSUME_SORTED=true"]                        
+        popen = Popen(command, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = popen.communicate()        
         
-        # write stdout and stderr to files for troubleshooting
-        stdout_name = file_name + ".stdout.txt"
-        stderr_name = file_name + ".stderr.txt"
-        stdout_path = os.path.join(dirname, stdout_name)
-        stderr_path = os.path.join(dirname, stderr_name)
-        with open(stdout_path, "w") as FO:
+        # add output files to writeback list
+        for path in (outpath_txt,):    
+            if (os.path.exists(path) and os.path.getsize(path)):           
+                f = File(app_result_id=self.app_result_id,
+                    file_name=os.path.split(path)[1],
+                    local_path=path)
+                self.output_files.append(f)
+        
+        # write stdout and stderr to files for troubleshooting, add to writeback queue        
+        with open(outpath_stdout, "w") as FO:
             FO.write(stdout)
-        with open(stderr_path, "w") as FE:
-            FE.write(stderr)
-        
-        # add stdout and stderr to write-back queue
-        # but don't upload empty files since API currently chokes on these        
+        with open(outpath_stderr, "w") as FE:
+            FE.write(stderr)                
+        # don't upload empty files since API currently chokes on these        
         if len(stdout):
             f_stdout = File(app_result_id=self.app_result_id,
-                file_name=stdout_name,
-                local_path=stdout_path)        
+                file_name=os.path.split(outpath_stdout)[1],
+                local_path=outpath_stdout)        
             self.output_files.append(f_stdout)            
         if len(stderr):                            
             f_stderr = File(app_result_id=self.app_result_id,
-                file_name=stderr_name,
-                local_path=stderr_path)                                
+                file_name=os.path.split(outpath_stderr)[1],
+                local_path=outpath_stderr)                                
             self.output_files.append(f_stderr)
             
-        # return true if picard return code was successful
+        # return true if return code was successful
         # note: not handling returncode=None, which means process may still be running
-        if (p.returncode == 0):
+        if (popen.returncode == 0):
+            return(True)
+        else:
+            return(False)    
+        
+
+    def _collect_gc_bias_metrics(self, input_file):    
+        """
+        Run picard's CollectGcBiasMetrics on a BAM file       
+        """
+        input_path = input_file.local_path
+        db = current.db                
+        app = db(db.app_data.id > 0).select().first()
+                        
+        # assemble output file names and paths
+        outpath_txt = input_path + current.file_ext['gc_bias_txt']        
+        outpath_pdf = input_path + current.file_ext['gc_bias_pdf']
+        outpath_sum = input_path + current.file_ext['gc_bias_summary']                
+        outpath_stdout = input_path + current.file_ext['gc_bias_stdout']
+        outpath_stderr = input_path + current.file_ext['gc_bias_stderr']
+        
+        # get genome fasta, return if not available
+        gen_row = db(db.genome.id==input_file.genome_id).select().first()
+        if not gen_row:
+            return True                    
+        genome_path = os.path.join(current.genomes_path, gen_row.local_path)
+        fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")                
+
+        # assemble picard command and run it
+        jar = os.path.join(app.picard_exe, "CollectGcBiasMetrics.jar")
+        command = ["java", "-jar", "-Xms2G",
+            os.path.join(current.request.folder, jar),
+            "REFERENCE_SEQUENCE=" + fasta_path,
+            "INPUT=" + input_path, 
+            "OUTPUT=" + outpath_txt,
+            "CHART_OUTPUT=" + outpath_pdf,
+            "SUMMARY_OUTPUT=" + outpath_sum, 
+            "VALIDATION_STRINGENCY=LENIENT",
+            "ASSUME_SORTED=true"]                                                    
+        popen = Popen(command, stdout=PIPE, stderr=PIPE)
+        stdout, stderr = popen.communicate()                        
+            
+        # add output files to writeback list
+        for path in (outpath_txt, outpath_pdf, outpath_sum):    
+            if (os.path.exists(path) and os.path.getsize(path)):           
+                f = File(app_result_id=self.app_result_id,
+                    file_name=os.path.split(path)[1],
+                    local_path=path)
+                self.output_files.append(f)
+        
+        # write stdout and stderr to files for troubleshooting, add to writeback queue        
+        with open(outpath_stdout, "w") as FO:
+            FO.write(stdout)
+        with open(outpath_stderr, "w") as FE:
+            FE.write(stderr)                
+        # don't upload empty files since API currently chokes on these        
+        if len(stdout):
+            f_stdout = File(app_result_id=self.app_result_id,
+                file_name=os.path.split(outpath_stdout)[1],
+                local_path=outpath_stdout)        
+            self.output_files.append(f_stdout)            
+        if len(stderr):                            
+            f_stderr = File(app_result_id=self.app_result_id,
+                file_name=os.path.split(outpath_stderr)[1],
+                local_path=outpath_stderr)                                
+            self.output_files.append(f_stderr)
+            
+        # return true if return code was successful
+        # note: not handling returncode=None, which means process may still be running
+        if (popen.returncode == 0):
             return(True)
         else:
             return(False)    
@@ -358,7 +435,7 @@ class ProductPurchase(object):
                 self.prod_quantity = 1                                   
         else:
             raise UnrecognizedProductException(self.prod_name)
-
+        
 
 def readable_bytes(size,precision=2):
     """
@@ -417,6 +494,7 @@ def download_bs_file(input_file_id):
     # create a File object
     als_file = AnalysisInputFile(
         app_result_id=f_row.app_result_id,
+        genome_id=f_row.genome_id,
         bs_file_id=f_row.id,
         file_num=f_row.file_num,
         file_name=f_row.file_name,
@@ -471,6 +549,7 @@ def analyze_bs_file(input_file_id, time_download=None):
 
     input_file = AnalysisInputFile(
         app_result_id=f_row.app_result_id,
+        genome_id=f_row.genome_id,
         file_num=f_row.file_num,
         file_name=f_row.file_name,
         local_path=f_row.local_path)

@@ -91,9 +91,33 @@ auth.settings.expiration = 3600  # seconds
 
 
 # define global vars
-current.debug_ps = False
-current.aln_metrics_ext = ".AlignmentMetrics.txt"
+current.debug_ps = True
 current.product_names = {'AlignmentQC':'AlignmentQC'}
+current.file_ext = {'aln_txt': '.alignment_metrics.txt',
+                    'aln_stdout': '.alignment_metrics.stdout.txt',
+                    'aln_stderr': '.alignment_metrics.stderr.txt',
+                    'gc_bias_txt': '.gc_bias_metrics.txt',
+                    'gc_bias_pdf': '.gc_bias_metrics.pdf',
+                    'gc_bias_summary': '.gc_bias_metrics.summary_metrics.txt',
+                    'gc_bias_stdout': '.gc_bias_metrics.stdout.txt',
+                    'gc_bias_stderr': '.gc_bias_metrics.stderr.txt',
+                    }        
+
+# genomes keyed by BaseSpace genome id
+#current.genomes = {                   
+#   '3': 'Escherichia_coli_K_12_DH10B/NCBI/2008-03-17',
+#   '4': 'Homo_sapiens/UCSC/hg19',
+#   '5': 'Mus_musculus/UCSC/mm9',
+#   '6': 'PhiX/Illumina/RTA',
+#   '7': 'Rhodobacter_sphaeroides_2.4.1/NCBI/2005-10-07',                   
+#   '12': 'Bacillus_cereus_ATCC_10987/NCBI/2004-02-13' }
+#current.unsupported_genomes = {
+#   '1': 'Arabidopsis thaliana',
+#   '2': 'Bos taurus',                                      
+#   '8': 'Rattus norvegicus',
+#   '9': 'Saccharomyces cerevisiae',
+#   '10': 'Staphylococcus aureus',
+#   '11': 'N.A.' }
 
 # define app data - 
 # NOTE - on initial install, must configure client_id, client_secret, and redirect_uri (and product(s) in product table)
@@ -261,6 +285,11 @@ db.define_table('app_session',
     Field('status'),                    
     Field('message'))                   # detail about AppSession status
 
+db.define_table('genome',
+    Field('display_name'),
+    Field('genome_num'),
+    Field('local_path'))
+
 db.define_table('input_app_result',     # newly created AppResult for PicardSpace's output files
 #    Field('app_session_id', db.app_session),
     Field('app_result_num'),
@@ -270,6 +299,7 @@ db.define_table('input_app_result',     # newly created AppResult for PicardSpac
 
 db.define_table('input_file',
     Field('app_result_id', db.input_app_result), # the AppResult that contains this File in BaseSpace
+    Field('genome_id', db.genome),
     Field('file_num'),
     Field('file_name'),
     Field('local_path'))    
@@ -284,6 +314,7 @@ db.define_table('output_app_result',    # newly created AppResult for PicardSpac
 
 db.define_table('output_file',
     Field('app_result_id', db.output_app_result), # the AppResult that contains this File in BaseSpace
+    Field('genome_id', db.genome),
     Field('file_num'),
     Field('file_name'),
     Field('local_path'))

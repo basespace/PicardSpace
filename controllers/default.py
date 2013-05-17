@@ -440,7 +440,29 @@ def confirm_analysis_inputs():
         except Exception as e:
             ret['err_msg'] = "Error retrieving sample from BaseSpace: " + str(e)   
             return ret                     
-        ret['sample_name'] = sample.Name               
+        ret['sample_name'] = sample.Name
+        
+    # get genome of sample, get id from href for now
+    try:
+        match = re.search('genomes/(\d+)$', sample.HrefGenome)
+    except AttributeError:
+        ret['genome_name'] = 'Unknown genome'
+    else:
+        if not match:
+            ret['genome_name'] = 'Unrecognized genome'
+        else:
+            genome_num = match.group(1)            
+            # look up genome in local db; if absent, get display name from BaseSpace
+            gen_row = db(db.genome.genome_num==genome_num).select().first()                    
+            if gen_row:
+                ret['genome_name'] = gen_row.display_name
+            else:
+                try:
+                    genome = bs_api.getGenomeById(genome_num)
+                except Exception as e:
+                    ret['err_msg'] = "Error retrieving genome from BaseSpace: " + str(e)   
+                    return ret            
+                ret['genome_name'] = "Unsupported genome: " + genome.DisplayName
 
     # determine if user owns launch project, if not use 'PicardSpace Results' - won't create new project until after user confirms analysis
     if user_row.username == launch_project.UserOwnedBy.Id:
@@ -659,7 +681,23 @@ def start_analysis():
             sample = bs_api.getSampleById(sample_num)
         except Exception as e:
             return dict(err_msg=str(e))
-            
+
+    # get genome of sample, get id from href for now
+    try:    
+        match = re.search('genomes/(\d+)$', sample.HrefGenome)
+    except AttributeError:
+        genome_id = 0
+    else:
+        if not match:
+            genome_id = 0        
+        else:
+            genome_num = match.group(1)
+            gen_row = db(db.genome.genome_num==genome_num).select().first()                    
+            if gen_row:
+                genome_id = gen_row.id
+            else:
+                genome_id =  0 # zero entry is unsupported or unknown genome 
+                
     # clean app result name - only allow alpha, numeric, spaces, and a few symbols
     ar_name = re.sub("[^ a-zA-Z0-9_.,()\[\]+-]", "", ar_name.strip())        
     if not ar_name:
@@ -684,6 +722,7 @@ def start_analysis():
     # add input BAM file to db
     input_file_id = db.input_file.insert(
         app_result_id=input_app_result_id,
+        genome_id=genome_id,
         file_num=file_num, 
         file_name=input_file.Name)
     db.commit()                    
@@ -857,7 +896,7 @@ def view_alignment_metrics():
     f_row = None
     for row in f_rows:
         # find file with aln metrics extension
-        m = re.search(current.aln_metrics_ext + "$", row.file_name)
+        m = re.search(current.file_ext['aln_txt'] + "$", row.file_name)
         if m:
             f_row = row
             break
