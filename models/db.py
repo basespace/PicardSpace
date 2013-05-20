@@ -32,9 +32,11 @@ if os.path.isfile(settings_path):
         sys.exit(-1)
     current.genomes_path = config.get('PicardSpaceSettings', 'genomes_path')
     current.scratch_path = config.get('PicardSpaceSettings', 'scratch_path')
+    current.picard_path = config.get('PicardSpaceSettings', 'picard_path')
 else:
     current.genomes_path = os.path.join(request.folder, 'private', 'genomes')
     current.scratch_path = os.path.join(request.folder, 'private', 'downloads')
+    current.picard_path = os.path.join(request.folder, 'private', 'picard-tools-1.92')
 
 # instantiate web2py Scheduler
 scheduler = Scheduler(db, heartbeat=1) # override heartbeat to check for tasks every 1 sec (instead of 3 secs)
@@ -91,7 +93,7 @@ auth.settings.expiration = 3600  # seconds
 
 
 # define global vars
-current.debug_ps = True
+current.debug_ps = False
 current.product_names = {'AlignmentQC':'AlignmentQC'}
 current.file_ext = {'aln_txt': '.alignment_metrics.txt',
                     'aln_stdout': '.alignment_metrics.stdout.txt',
@@ -101,6 +103,10 @@ current.file_ext = {'aln_txt': '.alignment_metrics.txt',
                     'gc_bias_summary': '.gc_bias_metrics.summary_metrics.txt',
                     'gc_bias_stdout': '.gc_bias_metrics.stdout.txt',
                     'gc_bias_stderr': '.gc_bias_metrics.stderr.txt',
+                    'insert_size_txt': '.insert_size_metrics.txt',
+                    'insert_size_hist': '.insert_size_metrics.pdf',
+                    'insert_size_stdout': '.insert_size_metrics.stdout.txt',
+                    'insert_size_stderr': '.insert_size_metrics.stderr.txt',
                     }        
 
 # genomes keyed by BaseSpace genome id
@@ -130,7 +136,8 @@ db.define_table('app_data',
     Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),    
     Field('redirect_uri', default='http://localhost:8000/PicardSpace/default/handle_redirect_uri'),
     Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
-    Field('picard_exe', default='private/picard-tools-1.74/CollectAlignmentSummaryMetrics.jar'),
+    # DEPRECATED: picard_exe
+    Field('picard_exe', default='private/picard-tools-1.74'),
     Field('google_analytics_id'))
 
 # create an instance of app_data table if not present
@@ -299,6 +306,7 @@ db.define_table('input_app_result',     # newly created AppResult for PicardSpac
 
 db.define_table('input_file',
     Field('app_result_id', db.input_app_result), # the AppResult that contains this File in BaseSpace
+    Field('is_paired_end'),
     Field('genome_id', db.genome),
     Field('file_num'),
     Field('file_name'),
@@ -314,8 +322,9 @@ db.define_table('output_app_result',    # newly created AppResult for PicardSpac
 
 db.define_table('output_file',
     Field('app_result_id', db.output_app_result), # the AppResult that contains this File in BaseSpace
-    Field('genome_id', db.genome),
-    Field('file_num'),
+    Field('is_paired_end'),             # currently unused
+    Field('genome_id', db.genome),      # currently unused
+    Field('file_num'),                  
     Field('file_name'),
     Field('local_path'))
 

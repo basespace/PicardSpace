@@ -385,7 +385,7 @@ def confirm_analysis_inputs():
     """
     ret = dict(sample_name="", file_name="", project_name="", writeback_msg="",
                ar_num="", file_num="", file_back="", price="", confirm_msg="", 
-               err_msg="") 
+               is_paired_end="", err_msg="") 
     
     # get file_num and app_result_num that user selected    
     if ('file_num' not in request.vars or
@@ -441,6 +441,15 @@ def confirm_analysis_inputs():
             ret['err_msg'] = "Error retrieving sample from BaseSpace: " + str(e)   
             return ret                     
         ret['sample_name'] = sample.Name
+
+    # get paired-end status of sample
+    try:
+        if sample.IsPairedEnd:
+            ret['is_paired_end'] = 'Paired-end'
+        else:            
+            ret['is_paired_end'] = 'Single-end'
+    except AttributeError:
+        ret['is_paired_end'] = 'unknown'       
         
     # get genome of sample, get id from href for now
     try:
@@ -681,6 +690,15 @@ def start_analysis():
             sample = bs_api.getSampleById(sample_num)
         except Exception as e:
             return dict(err_msg=str(e))
+    
+    # get pair-end status
+    try:
+        if sample.IsPairedEnd:
+            is_paired_end = 'paired'
+        else:            
+            is_paired_end = 'single'
+    except AttributeError:
+        is_paired_end = 'unknown'    
 
     # get genome of sample, get id from href for now
     try:    
@@ -722,6 +740,7 @@ def start_analysis():
     # add input BAM file to db
     input_file_id = db.input_file.insert(
         app_result_id=input_app_result_id,
+        is_paired_end=is_paired_end,
         genome_id=genome_id,
         file_num=file_num, 
         file_name=input_file.Name)
