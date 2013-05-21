@@ -6,7 +6,7 @@ from ConfigParser import ConfigParser
 from gluon import current, HTTP
 from gluon.tools import Auth
 from gluon.scheduler import Scheduler
-from picardSpace import get_auth_code_util, get_access_token_util, download_bs_file, analyze_bs_file
+from picardSpace import get_auth_code_util, get_access_token_util, analyze_bs_file # needed for scheduler
 
 # get database info, from local file if present
 db_info_path = os.path.join(request.folder, 'private', 'ticket_storage.txt')
@@ -107,6 +107,14 @@ current.file_ext = {'aln_txt': '.alignment_metrics.txt',
                     'insert_size_hist': '.insert_size_metrics.pdf',
                     'insert_size_stdout': '.insert_size_metrics.stdout.txt',
                     'insert_size_stderr': '.insert_size_metrics.stderr.txt',
+                    'qual_by_cycle_txt': '.qual_by_cycle.txt',
+                    'qual_by_cycle_pdf': '.qual_by_cycle.pdf',
+                    'qual_by_cycle_stdout': '.qual_by_cycle.stdout.txt',
+                    'qual_by_cycle_stderr': '.qual_by_cycle.stderr.txt',
+                    'qual_dist_txt': '.qual_distribution.txt',
+                    'qual_dist_pdf': '.qual_distribution.pdf',
+                    'qual_dist_stdout': '.qual_distribution.stdout.txt',
+                    'qual_dist_stderr': '.qual_distribution.stderr.txt',
                     }        
 
 # genomes keyed by BaseSpace genome id

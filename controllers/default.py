@@ -6,7 +6,7 @@ from datetime import datetime
 from gluon import HTTP
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
-from picardSpace import File, AnalysisInputFile, ProductPurchase, readable_bytes, get_auth_code_util, get_access_token_util, download_bs_file
+from picardSpace import File, ProductPurchase, readable_bytes, get_auth_code_util, get_access_token_util, analyze_bs_file
 
 # Auth notes:
 # 1. All '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called (and _next=controller_method)
@@ -762,9 +762,9 @@ def start_analysis():
 
     # add BAM File to download queue
     if (current.debug_ps):
-        download_bs_file(input_file_id)
+        analyze_bs_file(input_file_id)
     else:
-        scheduler.queue_task(download_bs_file, 
+        scheduler.queue_task(analyze_bs_file, 
                              pvars = {'input_file_id':input_file_id}, 
                              timeout = 86400, # seconds
                              immediate = True)
@@ -923,20 +923,18 @@ def view_alignment_metrics():
         # create file object
         f = File(app_result_id=f_row.app_result_id,
                 file_name=f_row.file_name,
-                local_path=None,
                 file_num=f_row.file_num)        
         # download file from BaseSpace
         local_dir = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num))        
         try:
-            local_path = f.download_file(f_row.file_num, local_dir, 
-                                         app_session_id)
+            f.download_file(f_row.file_num, local_dir, app_session_id)
         except Exception as e:
             ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
             return ret           
         
         # read local file into array (for display in view)
         aln_tbl = []
-        with open( local_path, "r") as ALN_QC:
+        with open( f.local_path, "r") as ALN_QC:
 
             # get picard output header - collect lines finding line starting with 'CATEGORY'
             line = ALN_QC.readline()
@@ -954,7 +952,7 @@ def view_alignment_metrics():
             
         # delete local files
         try:
-            shutil.rmtree(os.path.dirname(local_path))            
+            shutil.rmtree(os.path.dirname(f.local_path))            
         except Exception as e:
             ret['err_msg'] = "Error deleting local files: " + str(e)            
             return ret                

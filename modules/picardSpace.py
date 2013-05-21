@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # coding: utf8
-from gluon import *
 import os.path
 from subprocess import call
 from datetime import datetime
+import shutil
+from gluon import *
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
-import shutil
 
 
 class UnrecognizedProductException(Exception):
@@ -20,9 +20,11 @@ class File(object):
     """
     A File in BaseSpace
     """
-    def __init__(self, file_name, local_path, file_num=None, bs_file_id=None, app_result_id=None, genome_id=None, is_paired_end=None):              
+    def __init__(self, file_name, local_path=None, file_num=None, 
+                 bs_file_id=None, app_result_id=None, genome_id=None, 
+                 is_paired_end=None):              
         self.file_name = file_name
-        self.local_path = local_path
+        self.local_path = local_path # full path including file name
         self.file_num = file_num        
         self.bs_file_id = bs_file_id
         self.app_result_id = app_result_id
@@ -49,18 +51,19 @@ class File(object):
             os.makedirs(local_dir)
                 
         # write downloaded data to new file
-        f.downloadFile(bs_api,local_dir)                        
-        return(os.path.join(local_dir, f.Name))
+        f.downloadFile(bs_api,local_dir)
+        self.local_path = os.path.join(local_dir, f.Name)                  
+        #return(os.path.join(local_dir, f.Name))
         
     
 class AnalysisInputFile(File):
     """
     Class to download, analyze, and write-back results of a single file    
     """            
-    def download_and_queue_analysis(self):
+    def download_and_start_analysis(self):
         """
         Download file contents from BaseSpace and queue the file for analysis
-        """           
+        """    
         db = current.db  
         
         # get input file and output app result info from database        
@@ -74,11 +77,12 @@ class AnalysisInputFile(File):
         
         # set local_path location and url for downloading, and download file from BaseSpace        
         local_dir = AppResult.scratch_path(ssn_row.app_session_num)        
-        local_file = self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
+        self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
         
         # update file's local path
         file_row = db(db.input_file.id==self.bs_file_id).select().first()     
-        file_row.update_record(local_path=local_file)
+        #file_row.update_record(local_path=local_file)
+        file_row.update_record(local_path=self.local_path)
         db.commit()               
     
         # update app_session status to 'download complete, in analysis queue'
@@ -89,11 +93,20 @@ class AnalysisInputFile(File):
 
         # add file to analysis queue
         #if (current.debug_ps):
-        analyze_bs_file(input_file_id=self.bs_file_id, time_download=time_download)                              
+        #analyze_bs_file(input_file_id=self.bs_file_id, time_download=time_download)                              
         #else:
         #    current.scheduler.queue_task(analyze_bs_file, 
         #                                 pvars = {'input_file_id':self.bs_file_id, 'time_download':time_download}, 
         #                                 timeout = 86400) # seconds
+
+        # create AppResult object to analyze downloaded File
+        app_result = AppResult(
+            app_result_id=ar_row.id,
+            app_session_id=ar_row.app_session_id,
+            project_num=ar_row.project_num,
+            app_result_name=ar_row.app_result_name,
+            app_result_num=ar_row.app_result_num)                        
+        app_result.run_analysis_and_writeback(self, time_download)
             
 
 class AppResult(object):
@@ -239,12 +252,16 @@ class AppResult(object):
     def _run_picard(self, input_file):    
         """
         Run picard tools on a BAM file       
-        """
+        """        
         rv = self._collect_alignment_metrics(input_file)        
         rv = rv and self._collect_gc_bias_metrics(input_file)
         
         if input_file.is_paired_end == 'paired':
-            rv = rv and self._collect_insert_size_metrics(input_file)                
+            rv = rv and self._collect_insert_size_metrics(input_file)
+        
+        rv = rv and self._mean_quality_by_cycle(input_file)
+        rv = rv and self._quality_score_distribution(input_file)
+                    
         return rv
 
 
@@ -346,6 +363,76 @@ class AppResult(object):
         
         self.update_status('running', 'Collecting insert-size metrics')
         return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)          
+
+
+    def _mean_quality_by_cycle(self, input_file):    
+        """
+        Run picard's MeanQualityByCycle on a BAM file       
+        """
+        input_path = input_file.local_path
+        db = current.db                
+                        
+        # assemble output file names and paths
+        outpath_txt = input_path + current.file_ext['qual_by_cycle_txt']        
+        outpath_pdf = input_path + current.file_ext['qual_by_cycle_pdf']                        
+        outpaths = (outpath_txt, outpath_pdf)
+        outpath_stdout = input_path + current.file_ext['qual_by_cycle_stdout']
+        outpath_stderr = input_path + current.file_ext['qual_by_cycle_stderr']        
+        
+        # assemble picard command and run it
+        jar = os.path.join(current.picard_path, "MeanQualityByCycle.jar")
+        command = ["java", "-jar", "-Xms2G",
+            os.path.join(current.request.folder, jar),            
+            "INPUT=" + input_path, 
+            "OUTPUT=" + outpath_txt,
+            "CHART_OUTPUT=" + outpath_pdf,             
+            "VALIDATION_STRINGENCY=LENIENT",
+            "ASSUME_SORTED=true"]
+        
+        # add optional genome if available
+        gen_row = db(db.genome.id==input_file.genome_id).select().first()
+        if gen_row:
+            genome_path = os.path.join(current.genomes_path, gen_row.local_path)
+            fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
+            command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
+        
+        self.update_status('running', 'Calculating mean quality by cycle')
+        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)
+
+
+    def _quality_score_distribution(self, input_file):    
+        """
+        Run picard's QualityScoreDistribution on a BAM file       
+        """
+        input_path = input_file.local_path
+        db = current.db                
+                        
+        # assemble output file names and paths
+        outpath_txt = input_path + current.file_ext['qual_dist_txt']        
+        outpath_pdf = input_path + current.file_ext['qual_dist_pdf']                        
+        outpaths = (outpath_txt, outpath_pdf)
+        outpath_stdout = input_path + current.file_ext['qual_dist_stdout']
+        outpath_stderr = input_path + current.file_ext['qual_dist_stderr']        
+        
+        # assemble picard command and run it
+        jar = os.path.join(current.picard_path, "QualityScoreDistribution.jar")
+        command = ["java", "-jar", "-Xms2G",
+            os.path.join(current.request.folder, jar),            
+            "INPUT=" + input_path, 
+            "OUTPUT=" + outpath_txt,
+            "CHART_OUTPUT=" + outpath_pdf,             
+            "VALIDATION_STRINGENCY=LENIENT",
+            "ASSUME_SORTED=true"]
+        
+        # add optional genome if available
+        gen_row = db(db.genome.id==input_file.genome_id).select().first()
+        if gen_row:
+            genome_path = os.path.join(current.genomes_path, gen_row.local_path)
+            fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
+            command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
+        
+        self.update_status('running', 'Calculating quality score distribution')
+        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)
 
 
     def _run_command(self, command, outpaths, outpath_stdout, outpath_stderr):
@@ -499,10 +586,10 @@ def get_access_token_util(auth_code):
     return access_token
 
 
-def download_bs_file(input_file_id):
+def analyze_bs_file(input_file_id):
     """
-    Downloads file from BaseSpace -- called from queue
-    """
+    Downloads file from BaseSpace -- called from scheduler worker
+    """        
     db = current.db
 
     # refresh database connection -- needed for mysql RDS
@@ -525,7 +612,7 @@ def download_bs_file(input_file_id):
 
     # download the file from BaseSpace and queue analysis
     try:
-        als_file.download_and_queue_analysis()
+        als_file.download_and_start_analysis()
     except Exception as e:            
         # update AppSession status in db and BaseSpace
         ssn_row.update_record(status='aborted', message=str(e))            
@@ -541,7 +628,7 @@ def download_bs_file(input_file_id):
         
         # perform refund if user paid for analysis
         pr_row = db(db.purchase.app_session_id==ssn_row.id).select().first()
-        if pr_row.amount_total > 0:
+        if int(pr_row.amount_total) > 0:
             store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)           
             if pr_row.refund_status == 'NOTREFUNDED':
                 comment = 'Automatic refund was triggered by a PicardSpace error'
@@ -551,64 +638,9 @@ def download_bs_file(input_file_id):
                 pr_row.update_record(refund_status='COMPLETED', comment=comment)
                 ssn_row.update_record(message="[Purchase Refunded] " + str(e))            
                 db.commit()                                            
-        # raise exception so queue will record exception and mark job as failed
+        # raise exception so scheduler will mark job as failed
+        # note if not using scheduler (manual debug) this shows exception in to browser
         raise
     # sanity commit to db for web2py Scheduler
     db.commit()
 
-
-def analyze_bs_file(input_file_id, time_download=None):
-    """
-    Analyzes file from BaseSpace -- called from queue
-    """
-    db = current.db
-
-    # refresh database connection -- needed for mysql RDS
-    db.commit()
-
-    # get queued app result from db
-    f_row = db(db.input_file.id==input_file_id).select().first()
-    ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
-
-    input_file = AnalysisInputFile(
-        app_result_id=f_row.app_result_id,
-        genome_id=f_row.genome_id,
-        is_paired_end=f_row.is_paired_end,
-        file_num=f_row.file_num,
-        file_name=f_row.file_name,
-        local_path=f_row.local_path)
-
-    # create AppResult object to analyze downloaded File
-    app_result = AppResult(
-        app_result_id=ar_row.id,
-        app_session_id=ar_row.app_session_id,
-        project_num=ar_row.project_num,
-        app_result_name=ar_row.app_result_name,
-        app_result_num=ar_row.app_result_num)        
-        
-    # run analysis and writeback results to BaseSpace                        
-    message = 'None'
-    try:                        
-        app_result.run_analysis_and_writeback(input_file, time_download)                                            
-    except Exception as e:                                
-        message = str(e)
-        if e.message:
-            message = message + " - " + e.message
-        
-        # append error message to existing app ssn status msg (keep context);
-        message = app_result.status_message() + "; " + message
-        print "Error: {0}".format(message)
-
-        # update AppSession status in db and BaseSpace            
-        try:            
-            app_result.update_status('aborted', message, 'aborted')
-        except Exception as e:
-            # print err msg,  but not in db (user won't see it)
-            print "Error updating AppSession status: {0} - {1}".format(str(e), e.message) 
-        # raise exception so queue will record exception and mark job as failed
-        raise    
-    # sanity commit to db for web2py Scheduler
-    db.commit()
-
-
- 
