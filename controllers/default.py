@@ -6,7 +6,7 @@ from datetime import datetime
 from gluon import HTTP
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
-from picardSpace import File, ProductPurchase, readable_bytes, get_auth_code_util, get_access_token_util, analyze_bs_file
+from picardSpace import File, ProductPurchase, AppResult, readable_bytes, get_auth_code_util, get_access_token_util, analyze_bs_file
 
 # Auth notes:
 # 1. All '@auth.requires_login' decorators redirect to login() if a user isn't logged in when the method is called (and _next=controller_method)
@@ -868,12 +868,18 @@ def view_results():
 @auth.requires_login()
 def view_alignment_metrics():
     """
-    Display picard's output from CollectAlignmentMetrics
+    Display picard's output
     """
     ret = dict(aln_tbl="", hdr="", sample_name="", sample_num="", 
                input_file_name="", input_project_name="", 
                input_app_result_name="", output_app_result_name="", 
-               output_project_name="", ar_back="", err_msg="")
+               output_project_name="", ar_back="",
+               input_project_href="", output_project_href="",
+               qual_by_cycle_txt="", qual_by_cycle_pdf="", qual_by_cycle_stderr="",
+               qual_dist_txt="", qual_dist_pdf="", qual_dist_stderr="",
+               gc_bias_txt="", gc_bias_pdf="", gc_bias_summary="", gc_bias_stderr="",
+               insert_size_txt="", insert_size_hist="", insert_size_stderr="",
+               err_msg="")
     app_session_id = request.get_vars.app_session_id    
     ret['aln_tbl'] = [["data not available"]]
         
@@ -910,28 +916,53 @@ def view_alignment_metrics():
     ret['output_app_result_name'] = output_ar_row.app_result_name 
     ret['output_project_name'] = output_project.Name
 
-    # get output file info from db    
-    f_rows = db(db.output_file.app_result_id==output_ar_row.id).select()
-    f_row = None
-    for row in f_rows:
-        # find file with aln metrics extension
-        m = re.search(current.file_ext['aln_txt'] + "$", row.file_name)
-        if m:
-            f_row = row
-            break
-    if f_row:        
-        # create file object
-        f = File(app_result_id=f_row.app_result_id,
-                file_name=f_row.file_name,
-                file_num=f_row.file_num)        
-        # download file from BaseSpace
-        local_dir = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num))        
-        try:
-            f.download_file(f_row.file_num, local_dir, app_session_id)
-        except Exception as e:
-            ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
-            return ret           
+    ret['input_project_href'] = input_project.HrefBaseSpaceUI
+    ret['output_project_href'] = output_project.HrefBaseSpaceUI
+    
         
+    
+    # get BaseSpace links to output files
+    app_result = AppResult.init_from_db(output_ar_row)
+    try:
+        ret['qual_by_cycle_pdf'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_pdf'])
+        ret['qual_by_cycle_txt'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_txt'])
+        ret['qual_by_cycle_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_stderr'])                
+                
+    except Exception as e:
+        ret['err_msg'] = "Error retrieving qual by cycle file link from BaseSpace: " + str(e)
+        return ret        
+    try:
+        ret['qual_dist_pdf'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_pdf'])        
+        ret['qual_dist_txt'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_txt'])
+        ret['qual_dist_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_stderr'])
+    except Exception as e:
+        ret['err_msg'] = "Error retrieving qual dist file link from BaseSpace: " + str(e)
+        return ret        
+    try:
+        ret['gc_bias_pdf'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_pdf'])        
+        ret['gc_bias_txt'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_txt'])
+        ret['gc_bias_summary'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_summary'])
+        ret['gc_bias_stderr'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_stderr'])
+    except Exception as e:
+        ret['err_msg'] = "Error retrieving gc bias file link from BaseSpace: " + str(e)
+        return ret        
+    try:
+        ret['insert_size_hist'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_hist'])        
+        ret['insert_size_txt'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_txt'])
+        ret['insert_size_stderr'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_stderr'])
+    except Exception as e:
+        ret['err_msg'] = "Error retrieving insert size file link from BaseSpace: " + str(e)
+        return ret            
+    
+    # get alignment metrics table
+    try:
+        f = app_result.download_file(file_ext = current.file_ext['aln_txt'], 
+            dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret
+    
+    if f:
         # read local file into array (for display in view)
         aln_tbl = []
         with open( f.local_path, "r") as ALN_QC:

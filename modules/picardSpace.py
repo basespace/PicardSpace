@@ -4,6 +4,7 @@ import os.path
 from subprocess import call
 from datetime import datetime
 import shutil
+import re
 from gluon import *
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
@@ -37,7 +38,7 @@ class File(object):
         Download a file from BaseSpace into the provided directory (created if doesn't exist)
         """
         db = current.db
-        # get access token for app session's user (can't use current user since accessing from 'cron' script)        
+        # get access token for app session's user (can't use current user since may be accessing from scheduler worker)        
         ssn_row = db(db.app_session.id==app_session_id).select().first()
         user_row = db(db.auth_user.id==ssn_row.user_id).select().first()                        
                         
@@ -52,8 +53,22 @@ class File(object):
                 
         # write downloaded data to new file
         f.downloadFile(bs_api,local_dir)
-        self.local_path = os.path.join(local_dir, f.Name)                  
-        #return(os.path.join(local_dir, f.Name))
+        self.local_path = os.path.join(local_dir, f.Name)                          
+        
+
+    def get_file_url(self, file_num, app_session_id):
+        """
+        Returns the S3 link to the provided file
+        """
+        db = current.db
+        # get access token for app session's user (can't use current user since may be accessing from scheduler worker)        
+        ssn_row = db(db.app_session.id==app_session_id).select().first()
+        user_row = db(db.auth_user.id==ssn_row.user_id).select().first()                                                        
+        app = db(db.app_data.id > 0).select().first()
+        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)
+        f = bs_api.getFileById(file_num)                    
+                
+        return f.getFileUrl(bs_api)                
         
     
 class AnalysisInputFile(File):
@@ -106,8 +121,8 @@ class AnalysisInputFile(File):
             project_num=ar_row.project_num,
             app_result_name=ar_row.app_result_name,
             app_result_num=ar_row.app_result_num)                        
-        app_result.run_analysis_and_writeback(self, time_download)
-            
+        app_result.run_analysis_and_writeback(self, time_download)                
+
 
 class AppResult(object):
     """
@@ -121,6 +136,19 @@ class AppResult(object):
         self.app_result_num = app_result_num                    
         
         self.output_files = []           
+
+    @staticmethod
+    def init_from_db(row):
+        """
+        Return an AppResult object from the provided db Row object
+        """
+        return AppResult(
+                app_result_id=row.id,
+                app_session_id=row.app_session_id,
+                project_num=row.project_num,
+                app_result_name=row.app_result_name,
+                app_result_num=row.app_result_num)  
+    
 
     @staticmethod
     def scratch_path(app_ssn_num):
@@ -503,6 +531,49 @@ class AppResult(object):
                                   file_name=f.file_name, 
                                   local_path=f.local_path)                                   
             db.commit()
+
+
+    def download_file(self, file_ext, dest_path):
+        """
+        Downloads file with provided extension from BaseSpace to provided destination path 
+        """
+        db = current.db
+        # get output file info from db    
+        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
+        f_row = None
+        for row in f_rows:
+            # find file with aln metrics extension
+            m = re.search(file_ext + "$", row.file_name)
+            if m:
+                f_row = row
+                break
+        if f_row:                    
+            f = File(app_result_id=f_row.app_result_id,
+                    file_name=f_row.file_name,
+                    file_num=f_row.file_num)                                                
+            f.download_file(f_row.file_num, dest_path, self.app_session_id)                  
+            return f
+
+
+    def get_file_url(self, file_ext):
+        """
+        Returns S3 link of file with provided extension 
+        """
+        db = current.db
+        # get output file info from db    
+        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
+        f_row = None
+        for row in f_rows:
+            # find file with aln metrics extension
+            m = re.search(file_ext + "$", row.file_name)
+            if m:
+                f_row = row
+                break
+        if f_row:                    
+            f = File(app_result_id=f_row.app_result_id,
+                    file_name=f_row.file_name,
+                    file_num=f_row.file_num)                                                
+            return f.get_file_url(f_row.file_num, self.app_session_id)            
 
 
 class ProductPurchase(object):
