@@ -93,7 +93,7 @@ auth.settings.expiration = 3600  # seconds
 
 
 # define global vars
-current.debug_ps = True
+current.debug_ps = False
 current.product_names = {'AlignmentQC':'AlignmentQC'}
 current.file_ext = {'mult_metrics_stdout': '.multiple.metrics.stdout.txt',
                     'mult_metrics_stderr': '.multiple.metrics.stderr.txt',
@@ -146,8 +146,6 @@ db.define_table('app_data',
     Field('token_url', default='https://api.cloud-hoth.illumina.com/v1pre3/oauthv2/token/'),    
     Field('redirect_uri', default='http://localhost:8000/PicardSpace/default/handle_redirect_uri'),
     Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
-    # DEPRECATED: picard_exe
-    Field('picard_exe', default='private/picard-tools-1.74'),
     Field('google_analytics_id'))
 
 # create an instance of app_data table if not present
