@@ -280,17 +280,85 @@ class AppResult(object):
     def _run_picard(self, input_file):    
         """
         Run picard tools on a BAM file       
-        """        
-        rv = self._collect_alignment_metrics(input_file)        
+        """
+        rv = self._collect_multiple_metrics(input_file)
         rv = rv and self._collect_gc_bias_metrics(input_file)
+
+        # run individual programs to support command-line flags - not currently supported                
+        #rv = self._collect_alignment_metrics(input_file)        
+        #rv = rv and self._mean_quality_by_cycle(input_file)
+        #rv = rv and self._quality_score_distribution(input_file)
         
-        if input_file.is_paired_end == 'paired':
-            rv = rv and self._collect_insert_size_metrics(input_file)
-        
-        rv = rv and self._mean_quality_by_cycle(input_file)
-        rv = rv and self._quality_score_distribution(input_file)
-                    
+        #if input_file.is_paired_end == 'paired':
+        #    rv = rv and self._collect_insert_size_metrics(input_file)
+                                    
         return rv
+
+
+    def _collect_multiple_metrics(self, input_file):    
+        """
+        Run picard's CollectMultipleMetrics on a BAM file       
+        """
+        input_path = input_file.local_path
+        db = current.db                        
+                        
+        # assemble output file names and paths
+        outpath_base = input_path                            
+        outpaths = [input_path + current.file_ext['aln_txt'],                    
+                    input_path + current.file_ext['qual_by_cycle_txt'],
+                    input_path + current.file_ext['qual_by_cycle_pdf'],
+                    input_path + current.file_ext['qual_dist_txt'],
+                    input_path + current.file_ext['qual_dist_pdf'], ]
+        outpath_stdout = input_path + current.file_ext['mult_metrics_stdout']
+        outpath_stderr = input_path + current.file_ext['mult_metrics_stderr']                                
+        
+        # assemble picard command and run it
+        jar = os.path.join(current.picard_path, "CollectMultipleMetrics.jar")
+        command = ["java", "-jar", "-Xms2G",
+            os.path.join(current.request.folder, jar),            
+            "INPUT=" + input_path, 
+            "OUTPUT=" + outpath_base,                                
+            "VALIDATION_STRINGENCY=LENIENT",
+            "ASSUME_SORTED=true",
+            "PROGRAM=CollectAlignmentSummaryMetrics",
+            "PROGRAM=QualityScoreDistribution",
+            "PROGRAM=MeanQualityByCycle", ]
+
+        # calculate insert size metrics only for paired-end reads
+        if input_file.is_paired_end == 'paired':
+            command.append("PROGRAM=CollectInsertSizeMetrics")
+            outpaths.append(input_path + current.file_ext['insert_size_txt'])
+            outpaths.append(input_path + current.file_ext['insert_size_hist'])
+        
+        # add optional genome if available
+        gen_row = db(db.genome.id==input_file.genome_id).select().first()
+        if gen_row:
+            genome_path = os.path.join(current.genomes_path, gen_row.local_path)
+            fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
+            command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
+        
+        self.update_status('running', 'Collecting multiple metrics')
+        
+        # run command, write stdout, stderr to files
+        with open(outpath_stdout, "w") as FO:            
+            with open(outpath_stderr, "w") as FE:                                        
+                rcode = call(command, stdout=FO, stderr=FE)   
+        
+        # rename files with long extensions (can't upload to BaseSpace due to bug)
+        # these file don't initially have file extensions (picard's fault) -- add them        
+        os.rename(input_path + current.file_ext['aln_txt'][:-4], input_path + current.file_ext['aln_txt'])
+        os.rename(input_path + current.file_ext['qual_by_cycle_txt'][:-4], input_path + current.file_ext['qual_by_cycle_txt'])
+        os.rename(input_path + current.file_ext['qual_dist_txt'][:-4], input_path + current.file_ext['qual_dist_txt'])
+        if input_file.is_paired_end == 'paired':
+            os.rename(input_path + current.file_ext['insert_size_txt'][:-4], input_path + current.file_ext['insert_size_txt']) 
+       
+        # use method below to add output files to writeback list
+        self._run_command("", outpaths, outpath_stdout, outpath_stderr)
+        # return true if command was successful
+        if rcode == 0:
+            return(True)
+        else:
+            return(False)  
 
 
     def _collect_alignment_metrics(self, input_file):    
@@ -302,7 +370,7 @@ class AppResult(object):
                 
         # assemble output file names and paths                                                                    
         outpath_txt = input_path + current.file_ext['aln_txt']
-        outpaths = (outpath_txt,)
+        outpaths = [outpath_txt,]
         outpath_stdout = input_path + current.file_ext['aln_stdout']
         outpath_stderr = input_path + current.file_ext['aln_stderr']
         
@@ -330,7 +398,7 @@ class AppResult(object):
         outpath_txt = input_path + current.file_ext['gc_bias_txt']        
         outpath_pdf = input_path + current.file_ext['gc_bias_pdf']
         outpath_sum = input_path + current.file_ext['gc_bias_summary']
-        outpaths = (outpath_txt, outpath_pdf, outpath_sum)               
+        outpaths = [outpath_txt, outpath_pdf, outpath_sum]               
         outpath_stdout = input_path + current.file_ext['gc_bias_stdout']
         outpath_stderr = input_path + current.file_ext['gc_bias_stderr']                            
 
@@ -368,7 +436,7 @@ class AppResult(object):
         # assemble output file names and paths
         outpath_txt = input_path + current.file_ext['insert_size_txt']        
         outpath_hist = input_path + current.file_ext['insert_size_hist']                        
-        outpaths = (outpath_txt, outpath_hist)
+        outpaths = [outpath_txt, outpath_hist]
         outpath_stdout = input_path + current.file_ext['insert_size_stdout']
         outpath_stderr = input_path + current.file_ext['insert_size_stderr']        
         
@@ -403,7 +471,7 @@ class AppResult(object):
         # assemble output file names and paths
         outpath_txt = input_path + current.file_ext['qual_by_cycle_txt']        
         outpath_pdf = input_path + current.file_ext['qual_by_cycle_pdf']                        
-        outpaths = (outpath_txt, outpath_pdf)
+        outpaths = [outpath_txt, outpath_pdf]
         outpath_stdout = input_path + current.file_ext['qual_by_cycle_stdout']
         outpath_stderr = input_path + current.file_ext['qual_by_cycle_stderr']        
         
@@ -438,7 +506,7 @@ class AppResult(object):
         # assemble output file names and paths
         outpath_txt = input_path + current.file_ext['qual_dist_txt']        
         outpath_pdf = input_path + current.file_ext['qual_dist_pdf']                        
-        outpaths = (outpath_txt, outpath_pdf)
+        outpaths = [outpath_txt, outpath_pdf]
         outpath_stdout = input_path + current.file_ext['qual_dist_stdout']
         outpath_stderr = input_path + current.file_ext['qual_dist_stderr']        
         
@@ -469,9 +537,11 @@ class AppResult(object):
         Writeback files in the outpaths list and stdout + stderr
         """
         # run command, write stdout, stderr to files
-        with open(outpath_stdout, "w") as FO:            
-            with open(outpath_stderr, "w") as FE:                                        
-                rcode = call(command, stdout=FO, stderr=FE)        
+        rcode = 0
+        if (command):
+            with open(outpath_stdout, "w") as FO:            
+                with open(outpath_stderr, "w") as FE:                                        
+                    rcode = call(command, stdout=FO, stderr=FE)        
         
         # add output files to writeback list
         for path in outpaths:    

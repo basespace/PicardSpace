@@ -875,6 +875,7 @@ def view_alignment_metrics():
                input_app_result_name="", output_app_result_name="", 
                output_project_name="", ar_back="",
                input_project_href="", output_project_href="",
+               mult_metrics_stderr="",
                qual_by_cycle_txt="", qual_by_cycle_pdf="", qual_by_cycle_stderr="",
                qual_dist_txt="", qual_dist_pdf="", qual_dist_stderr="",
                gc_bias_txt="", gc_bias_pdf="", gc_bias_summary="", gc_bias_stderr="",
@@ -918,23 +919,21 @@ def view_alignment_metrics():
 
     ret['input_project_href'] = input_project.HrefBaseSpaceUI
     ret['output_project_href'] = output_project.HrefBaseSpaceUI
-    
-        
-    
+            
     # get BaseSpace links to output files
     app_result = AppResult.init_from_db(output_ar_row)
     try:
         ret['qual_by_cycle_pdf'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_pdf'])
         ret['qual_by_cycle_txt'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_txt'])
-        ret['qual_by_cycle_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_stderr'])                
-                
+        #ret['qual_by_cycle_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_stderr'])
+        ret['mult_metrics_stderr'] = app_result.get_file_url(file_ext = current.file_ext['mult_metrics_stderr'])                                
     except Exception as e:
         ret['err_msg'] = "Error retrieving qual by cycle file link from BaseSpace: " + str(e)
         return ret        
     try:
         ret['qual_dist_pdf'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_pdf'])        
         ret['qual_dist_txt'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_txt'])
-        ret['qual_dist_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_stderr'])
+        #ret['qual_dist_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_stderr'])
     except Exception as e:
         ret['err_msg'] = "Error retrieving qual dist file link from BaseSpace: " + str(e)
         return ret        
@@ -949,7 +948,7 @@ def view_alignment_metrics():
     try:
         ret['insert_size_hist'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_hist'])        
         ret['insert_size_txt'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_txt'])
-        ret['insert_size_stderr'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_stderr'])
+        #ret['insert_size_stderr'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_stderr'])
     except Exception as e:
         ret['err_msg'] = "Error retrieving insert size file link from BaseSpace: " + str(e)
         return ret            

@@ -31,15 +31,15 @@
   <div class="span6">
     {{ if qual_by_cycle_pdf: }}
       <h4>Mean Quality Per Cycle</h4>
-      <object data="{{=qual_by_cycle_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 400px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=qual_by_cycle_pdf}}">PDF</a> <a href="{{=qual_by_cycle_txt}}">TXT</a> <a href="{{=qual_by_cycle_stderr}}">LOG</a></small></p>
+      <object data="{{=qual_by_cycle_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
+      <p><small><a href="{{=qual_by_cycle_pdf}}">PDF</a> <a href="{{=qual_by_cycle_txt}}">TXT</a> <a href="{{=mult_metrics_stderr}}">LOG</a></small></p>
     {{pass}}
   </div>
   <div class="span6">
     {{ if qual_dist_pdf: }}
       <h4>Quality Distribution</h4>
-      <object data="{{=qual_dist_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 400px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=qual_dist_pdf}}">PDF</a> <a href="{{=qual_dist_txt}}">TXT</a> <a href="{{=qual_dist_stderr}}">LOG</a></small></p>
+      <object data="{{=qual_dist_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
+      <p><small><a href="{{=qual_dist_pdf}}">PDF</a> <a href="{{=qual_dist_txt}}">TXT</a> <a href="{{=mult_metrics_stderr}}">LOG</a></small></p>
     {{pass}}
   </div>
 </div>
@@ -48,21 +48,21 @@
   <div class="span6">
     {{ if gc_bias_pdf: }}
       <h4>GC Bias Metrics</h4>
-      <object data="{{=gc_bias_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 400px; width: 400px;">Please install a pdf plugin.</object>
+      <object data="{{=gc_bias_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
       <p><small><a href="{{=gc_bias_pdf}}">PDF</a> <a href="{{=gc_bias_txt}}">TXT</a> <a href="{{=gc_bias_summary}}">SUMMARY</a> <a href="{{=gc_bias_stderr}}">LOG</a></small></p>
     {{pass}}
   </div>
   <div class="span6">
     {{ if insert_size_hist: }}
       <h4>Insert Size Metrics</h4> 
-      <object data="{{=insert_size_hist}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 400px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=insert_size_hist}}">PDF</a> <a href="{{=insert_size_txt}}">TXT</a> <a href="{{=insert_size_stderr}}">LOG</a></small></p>
+      <object data="{{=insert_size_hist}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
+      <p><small><a href="{{=insert_size_hist}}">PDF</a> <a href="{{=insert_size_txt}}">TXT</a> <a href="{{=mult_metrics_stderr}}">LOG</a></small></p>
     {{pass}}
   </div>
 </div>
 
 <hr/>
-<h4>Alignment Metrics</h4>
+<h4>Alignment Metrics<small><a href="http://picard.sourceforge.net/picard-metric-definitions.shtml#AlignmentSummaryMetrics" target="_blank"> (metric definitions)</a></small></h4>
 
 <div class="accordion" id="accordion2">
   <div class="accordion-group">

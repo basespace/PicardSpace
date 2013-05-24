@@ -93,28 +93,30 @@ auth.settings.expiration = 3600  # seconds
 
 
 # define global vars
-current.debug_ps = False
+current.debug_ps = True
 current.product_names = {'AlignmentQC':'AlignmentQC'}
-current.file_ext = {'aln_txt': '.alignment_metrics.txt',
-                    'aln_stdout': '.alignment_metrics.stdout.txt',
-                    'aln_stderr': '.alignment_metrics.stderr.txt',                    
-                    'qual_by_cycle_txt': '.qual_by_cycle.txt',
-                    'qual_by_cycle_pdf': '.qual_by_cycle.pdf',
-                    'qual_by_cycle_stdout': '.qual_by_cycle.stdout.txt',
-                    'qual_by_cycle_stderr': '.qual_by_cycle.stderr.txt',
-                    'qual_dist_txt': '.qual_distribution.txt',
-                    'qual_dist_pdf': '.qual_distribution.pdf',
-                    'qual_dist_stdout': '.qual_distribution.stdout.txt',
-                    'qual_dist_stderr': '.qual_distribution.stderr.txt',
+current.file_ext = {'mult_metrics_stdout': '.multiple.metrics.stdout.txt',
+                    'mult_metrics_stderr': '.multiple.metrics.stderr.txt',
+                    'aln_txt': '.alignment_summary_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+                    'aln_stdout': '.alignment_metrics.stdout.txt', # not used by CollectMultipleMetrics
+                    'aln_stderr': '.alignment_metrics.stderr.txt', # not used by CollectMultipleMetrics                   
+                    'qual_by_cycle_txt': '.quality_by_cycle_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+                    'qual_by_cycle_pdf': '.quality_by_cycle.pdf', # fixed from CollectMultipleMetrics
+                    'qual_by_cycle_stdout': '.qual_by_cycle.stdout.txt', # not used by CollectMultipleMetrics
+                    'qual_by_cycle_stderr': '.qual_by_cycle.stderr.txt', # not used by CollectMultipleMetrics
+                    'qual_dist_txt': '.quality_distribution_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+                    'qual_dist_pdf': '.quality_distribution.pdf', # fixed from CollectMultipleMetrics
+                    'qual_dist_stdout': '.qual_distribution.stdout.txt', # not used by CollectMultipleMetrics
+                    'qual_dist_stderr': '.qual_distribution.stderr.txt', # not used by CollectMultipleMetrics
                     'gc_bias_txt': '.gc_bias_metrics.txt',
                     'gc_bias_pdf': '.gc_bias_metrics.pdf',
                     'gc_bias_summary': '.gc_bias_metrics.summary_metrics.txt',
                     'gc_bias_stdout': '.gc_bias_metrics.stdout.txt',
                     'gc_bias_stderr': '.gc_bias_metrics.stderr.txt',
-                    'insert_size_txt': '.insert_size_metrics.txt',
-                    'insert_size_hist': '.insert_size_metrics.pdf',
-                    'insert_size_stdout': '.insert_size_metrics.stdout.txt',
-                    'insert_size_stderr': '.insert_size_metrics.stderr.txt',
+                    'insert_size_txt': '.insert_size_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+                    'insert_size_hist': '.insert_size_histogram.pdf', # fixed from CollectMultipleMetrics
+                    'insert_size_stdout': '.insert_size_metrics.stdout.txt', # not used by CollectMultipleMetrics
+                    'insert_size_stderr': '.insert_size_metrics.stderr.txt', # not used by CollectMultipleMetrics
                     }        
 
 # genomes keyed by BaseSpace genome id
