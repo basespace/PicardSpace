@@ -314,7 +314,7 @@ class AppResult(object):
         
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "CollectMultipleMetrics.jar")
-        command = ["java", "-jar", "-Xms2G",
+        command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),            
             "INPUT=" + input_path, 
             "OUTPUT=" + outpath_base,                                
@@ -376,7 +376,7 @@ class AppResult(object):
         
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "CollectAlignmentSummaryMetrics.jar")
-        command = ["java", "-jar", "-Xms2G",
+        command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),
             "INPUT=" + input_path, 
             "OUTPUT=" + outpath_txt, 
@@ -404,7 +404,7 @@ class AppResult(object):
 
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "CollectGcBiasMetrics.jar")
-        command = ["java", "-jar", "-Xms2G",
+        command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),
             "INPUT=" + input_path, 
             "OUTPUT=" + outpath_txt,
@@ -442,7 +442,7 @@ class AppResult(object):
         
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "CollectInsertSizeMetrics.jar")
-        command = ["java", "-jar", "-Xms2G",
+        command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),            
             "INPUT=" + input_path, 
             "OUTPUT=" + outpath_txt,
@@ -477,7 +477,7 @@ class AppResult(object):
         
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "MeanQualityByCycle.jar")
-        command = ["java", "-jar", "-Xms2G",
+        command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),            
             "INPUT=" + input_path, 
             "OUTPUT=" + outpath_txt,
@@ -512,7 +512,7 @@ class AppResult(object):
         
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "QualityScoreDistribution.jar")
-        command = ["java", "-jar", "-Xms2G",
+        command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),            
             "INPUT=" + input_path, 
             "OUTPUT=" + outpath_txt,
