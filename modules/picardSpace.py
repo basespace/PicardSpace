@@ -346,14 +346,55 @@ class AppResult(object):
         
         # rename files with long extensions (can't upload to BaseSpace due to bug)
         # these file don't initially have file extensions (picard's fault) -- add them        
-        os.rename(input_path + current.file_ext['aln_txt'][:-4], input_path + current.file_ext['aln_txt'])
-        os.rename(input_path + current.file_ext['qual_by_cycle_txt'][:-4], input_path + current.file_ext['qual_by_cycle_txt'])
-        os.rename(input_path + current.file_ext['qual_dist_txt'][:-4], input_path + current.file_ext['qual_dist_txt'])
+        paths = [input_path + current.file_ext['aln_txt'], 
+                 input_path + current.file_ext['qual_by_cycle_txt'], 
+                 input_path + current.file_ext['qual_dist_txt'] ]
+        for path in paths:
+            if (os.path.exists(path[:-4])):
+                os.rename(path[:-4], path)
+        #os.rename(input_path + current.file_ext['qual_by_cycle_txt'][:-4], input_path + current.file_ext['qual_by_cycle_txt'])
         if input_file.is_paired_end == 'paired':
-            os.rename(input_path + current.file_ext['insert_size_txt'][:-4], input_path + current.file_ext['insert_size_txt']) 
+            path = input_path + current.file_ext['insert_size_txt']
+            if (os.path.exists(path[:-4])):
+                os.rename(path[:-4], path)
        
-        # use method below to add output files to writeback list
-        self._run_command("", outpaths, outpath_stdout, outpath_stderr)
+        # convert pdfs to pngs
+        pdf_path = input_path + current.file_ext['qual_by_cycle_pdf']
+        png_path = input_path + current.file_ext['qual_by_cycle_png']
+        cur_outpaths = [ png_path, ]        
+        if os.path.exists(pdf_path):
+            command = [ 'convert', '-flatten', pdf_path, png_path ]             
+            self._run_command(command, cur_outpaths)
+        
+        # TODO convert additional pdfs
+        
+        
+        
+        #self._pdf_to_png(input_path + current.file_ext['qual_by_cycle_pdf'],
+        #                 png_path)
+        #if (os.path.exists(png_path)):
+        #    outpaths.append(png_path)
+        #png_path = input_path + current.file_ext['qual_dist_png']
+        #self._pdf_to_png(input_path + current.file_ext['qual_dist_pdf'],
+        #                 png_path)
+        #if (os.path.exists(png_path)):
+        #    outpaths.append(png_path)
+        #png_path = input_path + current.file_ext['gc_bias_png']
+        #self._pdf_to_png(input_path + current.file_ext['gc_bias_pdf'],
+        #                 png_path)                          
+        #if (os.path.exists(png_path)):
+        #    outpaths.append(png_path)
+        #if input_file.is_paired_end == 'paired':
+        #    png_path = input_path + current.file_ext['insert_size_png']
+        #    self._pdf_to_png(input_path + current.file_ext['insert_size_hist'],
+        #                     png_path)            
+        #    if (os.path.exists(png_path)):
+        #        outpaths.append(png_path)
+                
+        # add output files to writeback list
+        #self._run_command("", outpaths, outpath_stdout, outpath_stderr)
+        self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)
+
         # return true if command was successful
         if rcode == 0:
             return(True)
@@ -531,52 +572,54 @@ class AppResult(object):
         return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)
 
 
-    def _run_command(self, command, outpaths, outpath_stdout, outpath_stderr):
+    def _run_command(self, command, outpaths, outpath_stdout=None, outpath_stderr=None):
         """
-        Run the provided command, and return the command's return value
+        Run the provided command (a sequence of program args, don't use a 
+        string), and return the command's return value. 
         Writeback files in the outpaths list and stdout + stderr
         """
         # run command, write stdout, stderr to files
-        rcode = 0
-        if (command):
-            with open(outpath_stdout, "w") as FO:            
-                with open(outpath_stderr, "w") as FE:                                        
-                    rcode = call(command, stdout=FO, stderr=FE)        
+        FO = None
+        if outpath_stdout:
+            FO = open(outpath_stdout, "w")
+        FE = None
+        if outpath_stderr:            
+            FE = open(outpath_stderr, "w")                                        
+        rcode = call(command, stdout=FO, stderr=FE)
+                
+        self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)
+
+        # return true if command was successful
+        if rcode == 0:
+            return(True)
+        else:
+            return(False)     
+
         
-        # add output files to writeback list
+    def _add_writeback_files(self, outpaths, outpath_stdout=None, outpath_stderr=None):
+        """
+        Add the provided list of output files to the list to writeback to BaseSpace
+        """
+        # add stdout to list if non-empty
+        if outpath_stdout and os.path.getsize(outpath_stdout):
+            outpaths.append(outpath_stdout)
+            
+        if outpath_stderr and os.path.getsize(outpath_stderr):        
+            # truncate grossly long stderr (> 10 MB)
+            if os.path.getsize(outpath_stderr) > 10000000:
+                with open(outpath_stderr, "r+") as FE:
+                    FE.truncate(10000000)
+                with open(outpath_stderr, "a") as FE:
+                    FE.write("[Truncated]")
+            outpaths.append(outpath_stderr)           
+                        
+        # add output files to writeback list        
         for path in outpaths:    
             if (os.path.exists(path) and os.path.getsize(path)):           
                 f = File(app_result_id=self.app_result_id,
                     file_name=os.path.split(path)[1],
                     local_path=path)
-                self.output_files.append(f)
-                               
-        # truncate grossly long stderr (> 10 MB)
-        if os.path.getsize(outpath_stderr) > 10000000:
-            with open(outpath_stderr, "r+") as FE:
-                FE.truncate(10000000)
-            with open(outpath_stderr, "a") as FE:
-                FE.write("[Truncated]")                        
-        
-        # add stderr to writeback list (if non-empty)
-        if outpath_stderr:
-            f_stderr = File(app_result_id=self.app_result_id,
-                file_name=os.path.split(outpath_stderr)[1],
-                local_path=outpath_stderr)                                
-            self.output_files.append(f_stderr)
-            
-        # add stdout to writeback list (if non-empty)
-        if os.path.getsize(outpath_stdout):
-            f_stdout = File(app_result_id=self.app_result_id,
-                file_name=os.path.split(outpath_stdout)[1],
-                local_path=outpath_stdout)        
-            self.output_files.append(f_stdout)            
-                    
-        # return true if command was successful
-        if rcode == 0:
-            return(True)
-        else:
-            return(False) 
+                self.output_files.append(f)                                                                           
 
 
     def _writeback_app_result_files(self):
@@ -763,7 +806,7 @@ def analyze_bs_file(input_file_id):
         user_row = db(db.auth_user.id==ssn_row.user_id).select().first()            
         bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
         app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
-        message = "Error downloading file from BaseSpace: {0}".format(str(e))            
+        message = "Error analyzing file from BaseSpace: {0}".format(str(e))            
         app_ssn.setStatus(bs_api, 'aborted', message[:128])                    
         print message # user won't see this
         
