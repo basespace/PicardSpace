@@ -1,0 +1,28 @@
+{{navbar_enabled=True}}
+{{extend 'layout.html'}}
+
+<p><small><a href="{{=back}}"><i class="icon-arrow-left"></i> Back</a></small></p>
+
+<h3>Insert Size Metrics<small><a href="http://picard.sourceforge.net/picard-metric-definitions.shtml#InsertSizeMetrics" target="_blank"> (metric definitions)</a></small></h3>
+
+<p class="text-error lead">{{=err_msg}}</p>
+
+<div class="accordion" id="accordion2">
+  <div class="accordion-group">
+    <div class="accordion-heading">
+      <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseOne">
+        Settings Used
+      </a>
+    </div>
+    <div id="collapseOne" class="accordion-body collapse">
+      <div class="accordion-inner">
+        <pre>{{=hdr}}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{=TABLE(*[TR(*rows) for rows in data_tbl], _class='table table-bordered table-striped')}}
+
+<h4>Histogram Data</h4>
+{{=TABLE(*[TR(*rows) for rows in hist_tbl], _class='alignment-metrics table table-bordered table-striped')}}
