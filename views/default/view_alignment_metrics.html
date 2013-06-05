@@ -3,77 +3,91 @@
 
 <p><small><a href="{{=ar_back}}"><i class="icon-arrow-left"></i> AppResults</a></small></p>
 
-  <h2>Picard Metrics</h2>
-    <dl class="dl-horizontal">
-        <dt>Sample</dt>
-        <dd>{{=sample_name}}</dd>
-        <!-- unsupported link to Sample until API supports this -->
-        <!-- <dd><a href="https://basespace.illumina.com/sample/{{=sample_num}}/{{=sample_name}}">{{=sample_name}}</a></dd> -->        
-    </dl>        
-    <dl class="dl-horizontal">        
-        <dt>Output AppResult</dt>
-        <dd>{{=output_app_result_name}}</dd>
-        <dt>Output Project</dt>
-        <dd><a href="{{=output_project_href}}">{{=output_project_name}}</a></dd>
-    </dl>
-    <dl class="dl-horizontal">        
-        <dt>Input File</dt>
-        <dd>{{=input_file_name}}</dd>
-        <dt>Input AppResult</dt>
-        <dd>{{=input_app_result_name}}</dd>
-        <dt>Input Project</dt>
-        <dd><a href="{{=input_project_href}}">{{=input_project_name}}</a></dd>
-    </dl>    
+  <h2>Metrics for <i>{{=sample_name}}</i></h2>
+  <div class="accordion" id="accordion_main">
+  <div class="accordion-group">
+    <div class="accordion-heading">
+      <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion_main" href="#collapse_main">
+        <i class="icon-list"></i> <small>Settings Used</small>
+      </a>
+    </div>
+    <div id="collapse_main" class="accordion-body collapse">
+      <div class="accordion-inner">
 
+	    <dl class="dl-horizontal">
+	        <dt>Sample</dt>
+	        <dd>{{=sample_name}}</dd>
+	        <!-- unsupported link to Sample until API supports this -->
+	        <!-- <dd><a href="https://basespace.illumina.com/sample/{{=sample_num}}/{{=sample_name}}">{{=sample_name}}</a></dd> -->        
+	    </dl>        
+	    <dl class="dl-horizontal">        
+	        <dt>Output AppResult</dt>
+	        <dd>{{=output_app_result_name}}</dd>
+	        <dt>Output Project</dt>
+	        <dd><a href="{{=output_project_href}}">{{=output_project_name}}</a></dd>
+	    </dl>
+	    <dl class="dl-horizontal">        
+	        <dt>Input File</dt>
+	        <dd>{{=input_file_name}}</dd>
+	        <dt>Input AppResult</dt>
+	        <dd>{{=input_app_result_name}}</dd>
+	        <dt>Input Project</dt>
+	        <dd><a href="{{=input_project_href}}">{{=input_project_name}}</a></dd>
+	    </dl>    
+
+      </div>
+    </div>
+  </div>
+</div>
+    
+      
 <p class="text-error lead">{{=err_msg}}</p>
 
 <div class="row">
   <div class="span6">
-    {{ if qual_by_cycle_pdf: }}
-      <h4>Mean Quality Per Cycle</h4>
-      <object data="{{=qual_by_cycle_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=qual_by_cycle_pdf}}">PDF</a> <a href="{{=qual_by_cycle_txt}}">TXT</a> <a href="{{=mult_metrics_stderr}}">LOG</a></small></p>
+    <h4>Mean Quality Per Cycle<small><a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a> 
+    {{ if not qual_by_cycle_png: }}
+      </small></h4>
+      Data not available
+    {{ else: }}              
+      <a href="{{=qual_by_cycle_url}}"> <i class="icon-th"></i> Table </a></small></h4>
+        <a href="{{=qual_by_cycle_url}}"><img src="{{=qual_by_cycle_png}}" alt="Quality By Cycle Graph" \></a>        
     {{pass}}
   </div>
   <div class="span6">
-    {{ if qual_dist_pdf: }}
-      <h4>Quality Distribution</h4>
-      <object data="{{=qual_dist_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=qual_dist_pdf}}">PDF</a> <a href="{{=qual_dist_txt}}">TXT</a> <a href="{{=mult_metrics_stderr}}">LOG</a></small></p>
+    {{ if qual_dist_png: }}
+      <h4>Quality Distribution<small><a href="{{=qual_dist_url}}"> <i class="icon-th"></i> (table values)</a></small></h4>
+        <a href="{{=qual_dist_url}}"><img src="{{=qual_dist_png}}" alt="Quality Distribution Graph" \></a>        
     {{pass}}
   </div>
 </div>
-<hr/>
 <div class="row">
   <div class="span6">
-    {{ if gc_bias_pdf: }}
-      <h4>GC Bias Metrics</h4>
-      <object data="{{=gc_bias_pdf}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=gc_bias_pdf}}">PDF</a> <a href="{{=gc_bias_txt}}">TXT</a> <a href="{{=gc_bias_summary}}">SUMMARY</a> <a href="{{=gc_bias_stderr}}">LOG</a></small></p>
+    {{ if gc_bias_png: }}
+      <h4>GC Bias Metrics<small><a href="{{=gc_bias_url}}"> <i class="icon-th"></i> (table values)</a></small></h4>
+        <a href="{{=gc_bias_url}}"><img src="{{=gc_bias_png}}" alt="GC Bias Graph" \></a>        
     {{pass}}
   </div>
   <div class="span6">
-    {{ if insert_size_hist: }}
-      <h4>Insert Size Metrics</h4> 
-      <object data="{{=insert_size_hist}}" type="application/pdf" class="pdf" width="1" height="1" style="height: 450px; width: 400px;">Please install a pdf plugin.</object>
-      <p><small><a href="{{=insert_size_hist}}">PDF</a> <a href="{{=insert_size_txt}}">TXT</a> <a href="{{=mult_metrics_stderr}}">LOG</a></small></p>
+    {{ if insert_size_png: }}
+      <h4>Insert Size Metrics<small><a href="{{=insert_size_url}}"> <i class="icon-th"></i> (table values)</a></small></h4> 
+        <a href="{{=insert_size_url}}"><img src="{{=insert_size_png}}" alt="Insert Size Graph" \></a>                
     {{pass}}
   </div>
 </div>
 
-<hr/>
-<h4>Alignment Metrics<small><a href="http://picard.sourceforge.net/picard-metric-definitions.shtml#AlignmentSummaryMetrics" target="_blank"> (metric definitions)</a></small></h4>
+<h3>Alignment Metrics <small> <a href="http://picard.sourceforge.net/picard-metric-definitions.shtml#AlignmentSummaryMetrics" target="_blank"><i class="icon-file"></i> Metric Definitions</a> {{ if mult_metrics_stderr: }}<a href="{{=mult_metrics_stderr}}"><i class="icon-file"></i> Logfile</a>{{pass}}</small></h3>
 
 <div class="accordion" id="accordion2">
   <div class="accordion-group">
     <div class="accordion-heading">
       <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseOne">
-        Settings Used
+        <small><i class="icon-list"></i> Settings Used</small>
       </a>
     </div>
     <div id="collapseOne" class="accordion-body collapse">
       <div class="accordion-inner">
-        {{=hdr}}
+        <pre>{{=hdr}}</pre>
       </div>
     </div>
   </div>

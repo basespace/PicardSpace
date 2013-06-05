@@ -33,6 +33,21 @@ class File(object):
         self.is_paired_end = is_paired_end
 
 
+    @staticmethod
+    def init_from_db(row):
+        """
+        Return an File object from the provided db Row object
+        """
+        return File(
+                file_name = row.file_name,
+                local_path = row.local_path,
+                file_num = row.file_num,
+                bs_file_id = row.id,
+                app_result_id = row.app_result_id,
+                genome_id = row.genome_id,
+                is_paired_end = row.is_paired_end)                  
+
+
     def download_file(self, file_num, local_dir, app_session_id):
         """
         Download a file from BaseSpace into the provided directory (created if doesn't exist)
@@ -199,7 +214,6 @@ class AppResult(object):
                               time_writeback = time_end_wb - time_start_wb)        
         
         # delete scratch path
-        #shutil.rmtree(os.path.dirname(input_file.local_path))
         ssn_row = db(db.app_session.id==self.app_session_id).select().first()
         shutil.rmtree(self.scratch_path(ssn_row.app_session_num))        
 
@@ -284,7 +298,7 @@ class AppResult(object):
         rv = self._collect_multiple_metrics(input_file)
         rv = rv and self._collect_gc_bias_metrics(input_file)
 
-        # run individual programs to support command-line flags - not currently supported                
+        # run individual programs to support command-line flags - not currently supported, also not renaming files or converting pdfs to pngs yet               
         #rv = self._collect_alignment_metrics(input_file)        
         #rv = rv and self._mean_quality_by_cycle(input_file)
         #rv = rv and self._quality_score_distribution(input_file)
@@ -352,47 +366,26 @@ class AppResult(object):
         for path in paths:
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)
-        #os.rename(input_path + current.file_ext['qual_by_cycle_txt'][:-4], input_path + current.file_ext['qual_by_cycle_txt'])
         if input_file.is_paired_end == 'paired':
             path = input_path + current.file_ext['insert_size_txt']
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)
        
         # convert pdfs to pngs
-        pdf_path = input_path + current.file_ext['qual_by_cycle_pdf']
-        png_path = input_path + current.file_ext['qual_by_cycle_png']
-        cur_outpaths = [ png_path, ]        
-        if os.path.exists(pdf_path):
-            command = [ 'convert', '-flatten', pdf_path, png_path ]             
-            self._run_command(command, cur_outpaths)
+        convert = [['qual_by_cycle_pdf', 'qual_by_cycle_png'],
+                   ['qual_dist_pdf', 'qual_dist_png']]                   
+        if input_file.is_paired_end == 'paired':
+            convert.append(['insert_size_hist', 'insert_size_png'])
         
-        # TODO convert additional pdfs
-        
-        
-        
-        #self._pdf_to_png(input_path + current.file_ext['qual_by_cycle_pdf'],
-        #                 png_path)
-        #if (os.path.exists(png_path)):
-        #    outpaths.append(png_path)
-        #png_path = input_path + current.file_ext['qual_dist_png']
-        #self._pdf_to_png(input_path + current.file_ext['qual_dist_pdf'],
-        #                 png_path)
-        #if (os.path.exists(png_path)):
-        #    outpaths.append(png_path)
-        #png_path = input_path + current.file_ext['gc_bias_png']
-        #self._pdf_to_png(input_path + current.file_ext['gc_bias_pdf'],
-        #                 png_path)                          
-        #if (os.path.exists(png_path)):
-        #    outpaths.append(png_path)
-        #if input_file.is_paired_end == 'paired':
-        #    png_path = input_path + current.file_ext['insert_size_png']
-        #    self._pdf_to_png(input_path + current.file_ext['insert_size_hist'],
-        #                     png_path)            
-        #    if (os.path.exists(png_path)):
-        #        outpaths.append(png_path)
+        for (pdf_ext, png_ext) in convert:        
+            pdf_path = input_path + current.file_ext[pdf_ext]
+            png_path = input_path + current.file_ext[png_ext]
+            cur_outpaths = [ png_path, ]        
+            if os.path.exists(pdf_path):
+                command = [ 'convert', '-flatten', pdf_path, png_path ]             
+                self._run_command(command, cur_outpaths)                                            
                 
         # add output files to writeback list
-        #self._run_command("", outpaths, outpath_stdout, outpath_stderr)
         self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)
 
         # return true if command was successful
@@ -463,8 +456,35 @@ class AppResult(object):
         else:
             return True   
         
+        # run command, write stdout, stderr to files
         self.update_status('running', 'Collecting gc-bias metrics')
-        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)                                                                                                    
+        with open(outpath_stdout, "w") as FO:            
+            with open(outpath_stderr, "w") as FE:                                        
+                rcode = call(command, stdout=FO, stderr=FE)   
+        
+        # rename files with long extensions            
+        paths = [input_path + current.file_ext['gc_bias_txt'], ]         
+        for path in paths:
+            if (os.path.exists(path[:-4])):
+                os.rename(path[:-4], path)        
+       
+        # convert pdfs to pngs
+        convert = [['gc_bias_pdf', 'gc_bias_png'],]        
+        for (pdf_ext, png_ext) in convert:        
+            pdf_path = input_path + current.file_ext[pdf_ext]
+            png_path = input_path + current.file_ext[png_ext]
+            cur_outpaths = [ png_path, ]        
+            if os.path.exists(pdf_path):
+                command = [ 'convert', '-flatten', pdf_path, png_path ]             
+                self._run_command(command, cur_outpaths)                                            
+                
+        # add output files to writeback list
+        self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)                                                                                                            
+        # return true if command was successful
+        if rcode == 0:
+            return(True)
+        else:
+            return(False)  
 
 
     def _collect_insert_size_metrics(self, input_file):    
@@ -660,10 +680,8 @@ class AppResult(object):
             if m:
                 f_row = row
                 break
-        if f_row:                    
-            f = File(app_result_id=f_row.app_result_id,
-                    file_name=f_row.file_name,
-                    file_num=f_row.file_num)                                                
+        if f_row:
+            f = File.init_from_db(f_row)                                                                     
             f.download_file(f_row.file_num, dest_path, self.app_session_id)                  
             return f
 
@@ -673,20 +691,35 @@ class AppResult(object):
         Returns S3 link of file with provided extension 
         """
         db = current.db
-        # get output file info from db    
         f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
         f_row = None
         for row in f_rows:
-            # find file with aln metrics extension
+            # find file with provided extension
             m = re.search(file_ext + "$", row.file_name)
             if m:
                 f_row = row
                 break
         if f_row:                    
-            f = File(app_result_id=f_row.app_result_id,
-                    file_name=f_row.file_name,
-                    file_num=f_row.file_num)                                                
+            f = File.init_from_db(f_row)                                                    
             return f.get_file_url(f_row.file_num, self.app_session_id)            
+
+
+    def get_output_file(self, file_ext):
+        """
+        Returns a file object for the file with provided extension in this app result 
+        """
+        db = current.db
+        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
+        f_row = None
+        for row in f_rows:
+            # find file with provided extension
+            m = re.search(file_ext + "$", row.file_name)
+            if m:
+                f_row = row
+                break
+        if f_row:
+            f = File.init_from_db(f_row)            
+            return f                          
 
 
 class ProductPurchase(object):

@@ -868,7 +868,7 @@ def view_results():
 @auth.requires_login()
 def view_alignment_metrics():
     """
-    Display picard's output
+    Display multiple picard metrics graphs and alignment metrics
     """
     ret = dict(aln_tbl="", hdr="", sample_name="", sample_num="", 
                input_file_name="", input_project_name="", 
@@ -876,10 +876,10 @@ def view_alignment_metrics():
                output_project_name="", ar_back="",
                input_project_href="", output_project_href="",
                mult_metrics_stderr="",
-               qual_by_cycle_txt="", qual_by_cycle_pdf="", qual_by_cycle_stderr="",
-               qual_dist_txt="", qual_dist_pdf="", qual_dist_stderr="",
-               gc_bias_txt="", gc_bias_pdf="", gc_bias_summary="", gc_bias_stderr="",
-               insert_size_txt="", insert_size_hist="", insert_size_stderr="",
+               qual_by_cycle_pdf="", qual_by_cycle_url="",
+               qual_dist_pdf="", qual_dist_url="",
+               gc_bias_pdf="", gc_bias_url="",
+               insert_size_hist="", insert_size_url="",
                err_msg="")
     app_session_id = request.get_vars.app_session_id    
     ret['aln_tbl'] = [["data not available"]]
@@ -922,33 +922,46 @@ def view_alignment_metrics():
             
     # get BaseSpace links to output files
     app_result = AppResult.init_from_db(output_ar_row)
+        
+    # generate urls to individual metrics tables and stderr
+    back = URL('view_alignment_metrics', vars=dict(app_session_id=app_session_id, ar_back=ret['ar_back']))    
+    mm_stderr = app_result.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    if mm_stderr:
+        ret['mult_metrics_stderr'] = URL("view_textfile", vars=dict(
+            file_id = mm_stderr.bs_file_id, 
+            app_session_id = app_session_id,
+            back = back))        
+    ret['qual_by_cycle_url'] = URL("view_qual_by_cycle_metrics", vars=dict(
+            app_session_id = app_session_id,
+            back = back))
+    ret['qual_dist_url'] = URL("view_qual_dist_metrics", vars=dict(
+            app_session_id = app_session_id,
+            back = back))
+    ret['gc_bias_url'] = URL("view_gc_bias_metrics", vars=dict(
+            app_session_id = app_session_id,
+            back = back))    
+    ret['insert_size_url'] = URL("view_insert_size_metrics", vars=dict(
+            app_session_id = app_session_id,
+            back = back))
+    
+    # get links to image files
     try:
-        ret['qual_by_cycle_pdf'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_pdf'])
-        ret['qual_by_cycle_txt'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_txt'])
-        #ret['qual_by_cycle_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_stderr'])
-        ret['mult_metrics_stderr'] = app_result.get_file_url(file_ext = current.file_ext['mult_metrics_stderr'])                                
+        ret['qual_by_cycle_png'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_png'])
     except Exception as e:
         ret['err_msg'] = "Error retrieving qual by cycle file link from BaseSpace: " + str(e)
         return ret        
     try:
-        ret['qual_dist_pdf'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_pdf'])        
-        ret['qual_dist_txt'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_txt'])
-        #ret['qual_dist_stderr'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_stderr'])
+        ret['qual_dist_png'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_png'])        
     except Exception as e:
         ret['err_msg'] = "Error retrieving qual dist file link from BaseSpace: " + str(e)
         return ret        
     try:
-        ret['gc_bias_pdf'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_pdf'])        
-        ret['gc_bias_txt'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_txt'])
-        ret['gc_bias_summary'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_summary'])
-        ret['gc_bias_stderr'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_stderr'])
+        ret['gc_bias_png'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_png'])
     except Exception as e:
         ret['err_msg'] = "Error retrieving gc bias file link from BaseSpace: " + str(e)
         return ret        
     try:
-        ret['insert_size_hist'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_hist'])        
-        ret['insert_size_txt'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_txt'])
-        #ret['insert_size_stderr'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_stderr'])
+        ret['insert_size_png'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_png'])
     except Exception as e:
         ret['err_msg'] = "Error retrieving insert size file link from BaseSpace: " + str(e)
         return ret            
@@ -968,17 +981,17 @@ def view_alignment_metrics():
 
             # get picard output header - collect lines finding line starting with 'CATEGORY'
             line = ALN_QC.readline()
-            while not re.match("CATEGORY", line):
+            while line and not re.match("CATEGORY", line):
                 ret['hdr'] += line
                 line = ALN_QC.readline()
             # get picard metric data (and table headings)
-            aln_tbl.append(line.rstrip().split("\t"))
-            for line in ALN_QC:
-                if line.rstrip():
-                    aln_tbl.append(line.rstrip().split("\t"))
-            ALN_QC.close()
-            # transpose list (for viewing - so it is long instead of wide)(now its a tuple)
-            ret['aln_tbl'] = zip(*aln_tbl)
+            if line:
+                aln_tbl.append(line.rstrip().split("\t"))
+                for line in ALN_QC:
+                    if line.rstrip():
+                        aln_tbl.append(line.rstrip().split("\t"))
+                # transpose list (for viewing - so it is long instead of wide)(now its a tuple)
+                ret['aln_tbl'] = zip(*aln_tbl)
             
         # delete local files
         try:
@@ -990,8 +1003,373 @@ def view_alignment_metrics():
 
 
 @auth.requires_login()
+def view_textfile():
+    """
+    Display the contents of an output text file
+    """
+    ret = dict(back="", file_name="", file_contents="", err_msg="")    
+
+    if ('file_id' not in request.vars or
+        'app_session_id' not in request.vars):
+        ret['err_msg'] = "We have a problem - expected file and app session ids but didn't receive them." 
+        return ret             
+    file_id = request.get_vars.file_id
+    app_session_id = request.get_vars.app_session_id
+    
+    ret['back'] = URL('view_alignment_metrics')
+    if 'back' in request.vars:    
+        ret['back'] = request.vars.back        
+    
+    file_row = db(db.output_file.id==file_id).select().first()
+    ssn_row = db(db.app_session.id==app_session_id).select().first()
+
+    f = File(file_name=file_row.file_name,
+             file_num=file_row.file_num)
+    try:
+        f.download_file(file_row.file_num,
+            os.path.join(current.scratch_path, "viewing", ssn_row.app_session_num),
+            app_session_id)
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret
+        
+    if f:
+        ret['file_name'] = f.file_name
+        with open(f.local_path, "r") as FH:
+            cnt = 0
+            for line in FH:
+                ret['file_contents'] += line
+                cnt += 1
+                # don't display too many lines
+                if cnt > 50000:
+                    ret['file_contents'] += '(truncated)'
+                    break
+        # delete local files
+        try:
+            shutil.rmtree(os.path.dirname(f.local_path))            
+        except Exception as e:
+            ret['err_msg'] = "Error deleting local files: " + str(e)            
+            return ret                
+    return ret
+
+
+@auth.requires_login()
+def view_qual_by_cycle_metrics():
+    """
+    Display picard's quality by cycle metrics
+    """
+    ret = dict(back="", data_tbl="", hdr="", sample_name="", err_msg="")
+    
+    if 'app_session_id' not in request.vars:
+        ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
+        return ret             
+    app_session_id = request.get_vars.app_session_id
+    
+    ret['back'] = URL('view_alignment_metrics')
+    if 'back' in request.vars:    
+        ret['back'] = request.vars.back
+    
+    ssn_row = db(db.app_session.id==app_session_id).select().first()
+    ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
+    ar = AppResult.init_from_db(ar_row)        
+    
+    # get stderr 'LOG'
+    stderr = ar.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    ret['stderr'] = URL("view_textfile", vars=dict(
+            file_id = stderr.bs_file_id, 
+            app_session_id = app_session_id,
+            back = URL('view_qual_by_cycle_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
+    # get output text file
+    try:
+        f = ar.download_file(file_ext = current.file_ext['qual_by_cycle_txt'], 
+            dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret                
+    
+    # get urls of output images
+#    try:
+#        ret['qual_by_cycle_png'] = ar.get_file_url(file_ext = current.file_ext['qual_by_cycle_png'])
+#        ret['qual_by_cycle_pdf'] = ar.get_file_url(file_ext = current.file_ext['qual_by_cycle_pdf'])
+#    except Exception as e:
+#        ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
+#        return ret        
+        
+    ret['data_tbl'] = [["data not available"]]            
+    if f:
+        # read local file into array (for display in view)
+        data_tbl = []
+        with open( f.local_path, "r") as QC:
+
+            # get picard output header
+            line = QC.readline()
+            while line and not re.match("CYCLE", line):
+                ret['hdr'] += line
+                line = QC.readline()
+            # get picard metric data (and table headings)
+            if line:
+                data_tbl.append(line.rstrip().split("\t"))
+                for line in QC:
+                    if line.rstrip():
+                        data_tbl.append(line.rstrip().split("\t"))
+                ret['data_tbl'] = data_tbl
+        # delete local files
+        try:
+            shutil.rmtree(os.path.dirname(f.local_path))            
+        except Exception as e:
+            ret['err_msg'] = "Error deleting local files: " + str(e)            
+            return ret                             
+    return ret
+
+
+@auth.requires_login()
+def view_qual_dist_metrics():
+    """
+    Display picard's quality distribution metrics
+    """
+    ret = dict(back="", data_tbl="", hdr="", sample_name="", err_msg="")
+    
+    if 'app_session_id' not in request.vars:
+        ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
+        return ret             
+    app_session_id = request.get_vars.app_session_id
+    
+    ret['back'] = URL('view_alignment_metrics')
+    if 'back' in request.vars:    
+        ret['back'] = request.vars.back
+    
+    ssn_row = db(db.app_session.id==app_session_id).select().first()
+    ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
+    ar = AppResult.init_from_db(ar_row)        
+    
+    # get stderr 'LOG'
+    stderr = ar.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    ret['stderr'] = URL("view_textfile", vars=dict(
+            file_id = stderr.bs_file_id, 
+            app_session_id = app_session_id,
+            back = URL('view_qual_dist_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
+    # get output text file
+    try:
+        f = ar.download_file(file_ext = current.file_ext['qual_dist_txt'], 
+            dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret                
+    
+    # get urls of output images
+#    try:
+#        ret['qual_dist_png'] = ar.get_file_url(file_ext = current.file_ext['qual_dist_png'])
+#        ret['qual_dist_pdf'] = ar.get_file_url(file_ext = current.file_ext['qual_dist_pdf'])
+#    except Exception as e:
+#        ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
+#        return ret        
+                    
+    ret['data_tbl'] = [["data not available"]]         
+    if f:
+        # read local file into array (for display in view)
+        data_tbl = []
+        with open( f.local_path, "r") as QC:
+
+            # get picard output header
+            line = QC.readline()
+            while line and not re.match("QUALITY", line):
+                ret['hdr'] += line
+                line = QC.readline()
+            # get picard metric data (and table headings)
+            if line:
+                data_tbl.append(line.rstrip().split("\t"))
+                for line in QC:
+                    if line.rstrip():
+                        data_tbl.append(line.rstrip().split("\t"))
+                ret['data_tbl'] = data_tbl
+        # delete local files
+        try:
+            shutil.rmtree(os.path.dirname(f.local_path))            
+        except Exception as e:
+            ret['err_msg'] = "Error deleting local files: " + str(e)            
+            return ret                             
+    return ret
+
+
+@auth.requires_login()
+def view_gc_bias_metrics():
+    """
+    Display picard's gc-bias summary and histogram metrics
+    """
+    ret = dict(back = "", sum_tbl="", hist_tbl="", hdr="", sample_name="", err_msg="")        
+    
+    if 'app_session_id' not in request.vars:
+        ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
+        return ret             
+    app_session_id = request.get_vars.app_session_id
+    
+    ret['back'] = URL('view_alignment_metrics')
+    if 'back' in request.vars:    
+        ret['back'] = request.vars.back
+    
+    ssn_row = db(db.app_session.id==app_session_id).select().first()
+    ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
+    ar = AppResult.init_from_db(ar_row)        
+    
+    # get stderr 'LOG'
+    stderr = ar.get_output_file(file_ext = current.file_ext['gc_bias_stderr'])
+    ret['stderr'] = URL("view_textfile", vars=dict(
+            file_id = stderr.bs_file_id, 
+            app_session_id = app_session_id,
+            back = URL('view_gc_bias_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
+    # get output text files - summary and histogram values
+    try:
+        sf = ar.download_file(file_ext = current.file_ext['gc_bias_summary'], 
+            dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret                    
+    try:
+        hf = ar.download_file(file_ext = current.file_ext['gc_bias_txt'], 
+            dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret
+    
+    # get urls of output images
+    #try:
+    #    ret['gc_bias_png'] = ar.get_file_url(file_ext = current.file_ext['gc_bias_png'])
+    #    ret['gc_bias_pdf'] = ar.get_file_url(file_ext = current.file_ext['gc_bias_pdf'])
+    #except Exception as e:
+    #    ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
+    #    return ret         
+               
+    # first parse summary metrics file (then histogram data file)
+    ret['hdr'] += 'GC Bias Summary Values:\n'     
+    ret['sum_tbl'] = [["data not available"]]
+    ret['hist_tbl'] = [["data not available"]]
+    if sf and hf:
+        # read local file into array (for display in view)
+        sum_tbl = []
+        with open( sf.local_path, "r") as QC:
+            # get picard output header
+            line = QC.readline()
+            while line and not re.match("WINDOW_SIZE", line):
+                ret['hdr'] += line
+                line = QC.readline()
+            # get picard metric data (and table headings)
+            if line:
+                sum_tbl.append(line.rstrip().split("\t"))
+                for line in QC:
+                    if line.rstrip():
+                        sum_tbl.append(line.rstrip().split("\t"))
+                ret['sum_tbl'] = sum_tbl                        
+
+        # parse histogram data file    
+        ret['hdr'] += '\nGC-Bias Histogram Values:\n'            
+        hist_tbl = []
+        with open( hf.local_path, "r") as QC:
+            # get picard output header
+            line = QC.readline()
+            while line and not re.match("GC", line):
+                ret['hdr'] += line
+                line = QC.readline()
+            # get picard metric data (and table headings)
+            if line:
+                hist_tbl.append(line.rstrip().split("\t"))
+                for line in QC:
+                    if line.rstrip():
+                        hist_tbl.append(line.rstrip().split("\t"))
+                ret['hist_tbl'] = hist_tbl
+        # delete local files
+        try:
+            shutil.rmtree(os.path.dirname(hf.local_path))            
+        except Exception as e:
+            ret['err_msg'] = "Error deleting local files: " + str(e)            
+            return ret                  
+    return ret
+
+
+@auth.requires_login()
+def view_insert_size_metrics():
+    """
+    Display picard's insert size metrics
+    """
+    ret = dict(back = "", hist_tbl="", data_tbl="", hdr="", sample_name="", err_msg="")    
+
+    if 'app_session_id' not in request.vars:
+        ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
+        return ret             
+    app_session_id = request.get_vars.app_session_id
+    
+    ret['back'] = URL('view_alignment_metrics')
+    if 'back' in request.vars:    
+        ret['back'] = request.vars.back
+    
+    ssn_row = db(db.app_session.id==app_session_id).select().first()
+    ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
+    ar = AppResult.init_from_db(ar_row)        
+    
+    # get stderr 'LOG'
+    stderr = ar.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    ret['stderr'] = URL("view_textfile", vars=dict(
+            file_id = stderr.bs_file_id, 
+            app_session_id = app_session_id,
+            back = URL('view_insert_size_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
+    # get output text file
+    try:
+        f = ar.download_file(file_ext = current.file_ext['insert_size_txt'], 
+            dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+    except Exception as e:
+        ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+        return ret                
+    
+    # get urls of output images
+#    try:
+#        ret['insert_size_png'] = ar.get_file_url(file_ext = current.file_ext['insert_size_png'])
+#        ret['insert_size_pdf'] = ar.get_file_url(file_ext = current.file_ext['insert_size_pdf'])
+#    except Exception as e:
+#        ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
+#        return ret        
+                    
+    ret['hist_tbl'] = [["data not available"]]
+    ret['data_tbl'] = [["data not available"]]                            
+    if f:
+        # read local file into array (for display in view)
+        hist_tbl = []
+        data_tbl = []
+        with open( f.local_path, "r") as QC:
+
+            # get picard output header
+            line = QC.readline()
+            while line and not re.match("MEDIAN_INSERT_SIZE", line):
+                ret['hdr'] += line
+                line = QC.readline()
+            # get picard metric data (and table headings)
+            if line:                
+                data_tbl.append(line.rstrip().split("\t")) # summary headers
+                line = QC.readline()
+                if line:
+                    data_tbl.append(line.rstrip().split("\t")) # summary data line
+                    line = QC.readline()
+                    ret['data_tbl'] = zip(*data_tbl)
+                    while line and not re.match("insert_size", line): # add to header
+                        ret['hdr'] += line
+                        line = QC.readline()
+                    if line:
+                        hist_tbl.append(line.rstrip().split("\t")) # histogram header
+                        for line in QC:
+                            if line.rstrip():
+                                hist_tbl.append(line.rstrip().split("\t")) # histogram data
+                ret['hist_tbl'] = hist_tbl
+        # delete local files
+        try:
+            shutil.rmtree(os.path.dirname(f.local_path))            
+        except Exception as e:
+            ret['err_msg'] = "Error deleting local files: " + str(e)            
+            return ret                  
+    return ret
+
+
+@auth.requires_login()
 def help_me():
     """
+    Display 'help' info such as troubleshooting help
     """
     return dict(bs_url=auth.settings.logout_next)
 
