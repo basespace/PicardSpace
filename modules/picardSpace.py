@@ -625,10 +625,10 @@ class AppResult(object):
             outpaths.append(outpath_stdout)
             
         if outpath_stderr and os.path.getsize(outpath_stderr):        
-            # truncate grossly long stderr (> 10 MB)
-            if os.path.getsize(outpath_stderr) > 10000000:
+            # truncate grossly long stderr (> 1 MB)
+            if os.path.getsize(outpath_stderr) > 1000000:
                 with open(outpath_stderr, "r+") as FE:
-                    FE.truncate(10000000)
+                    FE.truncate(1000000)
                 with open(outpath_stderr, "a") as FE:
                     FE.write("[Truncated]")
             outpaths.append(outpath_stderr)           

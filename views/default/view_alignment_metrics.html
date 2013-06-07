@@ -44,39 +44,77 @@
 <p class="text-error lead">{{=err_msg}}</p>
 
 <div class="row">
-  <div class="span6">
-    <h4>Mean Quality Per Cycle<small><a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a> 
-    {{ if not qual_by_cycle_png: }}
+  <div class="span6"> 
+    {{ if qual_by_cycle_png: }}
+      <h4>Mean Quality Per Cycle<small>
+      {{ if mult_metrics_stderr: }}
+        <a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a>
+      {{pass}}
+      <a href="{{=qual_by_cycle_url}}"> <i class="icon-th"></i> Table </a>
       </small></h4>
-      Data not available
-    {{ else: }}              
-      <a href="{{=qual_by_cycle_url}}"> <i class="icon-th"></i> Table </a></small></h4>
-        <a href="{{=qual_by_cycle_url}}"><img src="{{=qual_by_cycle_png}}" alt="Quality By Cycle Graph" \></a>        
+      <a href="{{=qual_by_cycle_url}}"><img src="{{=qual_by_cycle_png}}" alt="Quality By Cycle Graph" \></a>                    
+    {{ elif mult_metrics_stderr: }}
+      <h4>Mean Quality Per Cycle<small>
+      <a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a>
+      </small></h4>
+      Data not available -- please view the Log.              
     {{pass}}
   </div>
   <div class="span6">
     {{ if qual_dist_png: }}
-      <h4>Quality Distribution<small><a href="{{=qual_dist_url}}"> <i class="icon-th"></i> (table values)</a></small></h4>
-        <a href="{{=qual_dist_url}}"><img src="{{=qual_dist_png}}" alt="Quality Distribution Graph" \></a>        
+      <h4>Quality Distribution<small>
+      {{ if mult_metrics_stderr: }}
+        <a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a>
+      {{pass}}
+      <a href="{{=qual_dist_url}}"> <i class="icon-th"></i> Table </a>
+      </small></h4>
+      <a href="{{=qual_dist_url}}"><img src="{{=qual_dist_png}}" alt="Quality Distribution Graph" \></a>
+    {{ elif mult_metrics_stderr: }}
+      <h4>Quality Distribution<small>
+      <a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a>      
+      </small></h4>
+      Data not available -- please view the Log.                 
     {{pass}}
   </div>
 </div>
 <div class="row">
   <div class="span6">
     {{ if gc_bias_png: }}
-      <h4>GC Bias Metrics<small><a href="{{=gc_bias_url}}"> <i class="icon-th"></i> (table values)</a></small></h4>
-        <a href="{{=gc_bias_url}}"><img src="{{=gc_bias_png}}" alt="GC Bias Graph" \></a>        
+      <h4>GC Bias Metrics<small>
+      {{ if gc_bias_stderr: }}
+        <a href="{{=gc_bias_stderr}}"> <i class="icon-file"></i> Log </a>
+      {{pass}}
+      <a href="{{=gc_bias_url}}"> <i class="icon-th"></i> Table </a>
+      </small></h4>
+      <a href="{{=gc_bias_url}}"><img src="{{=gc_bias_png}}" alt="GC Bias Graph" \></a>
+    {{ elif gc_bias_stderr: }}
+      <h4>GC Bias Metrics<small>      
+      <a href="{{=gc_bias_stderr}}"> <i class="icon-file"></i> Log </a>      
+      </small></h4>
+      Data not available -- please view the Log.
     {{pass}}
   </div>
   <div class="span6">
     {{ if insert_size_png: }}
-      <h4>Insert Size Metrics<small><a href="{{=insert_size_url}}"> <i class="icon-th"></i> (table values)</a></small></h4> 
-        <a href="{{=insert_size_url}}"><img src="{{=insert_size_png}}" alt="Insert Size Graph" \></a>                
+      <h4>Insert Size Metrics<small>
+      {{ if mult_metrics_stderr: }}
+        <a href="{{=mult_metrics_stderr}}"> <i class="icon-file"></i> Log </a>
+      {{pass}}
+      <a href="{{=insert_size_url}}"> <i class="icon-th"></i> Table </a>
+      </small></h4> 
+      <a href="{{=insert_size_url}}"><img src="{{=insert_size_png}}" alt="Insert Size Graph" \></a>
     {{pass}}
+    <!-- not showing stderr if png is absent, since only running for paired-end samples, and log avail above -->     
   </div>
 </div>
 
-<h3>Alignment Metrics <small> <a href="http://picard.sourceforge.net/picard-metric-definitions.shtml#AlignmentSummaryMetrics" target="_blank"><i class="icon-file"></i> Metric Definitions</a> {{ if mult_metrics_stderr: }}<a href="{{=mult_metrics_stderr}}"><i class="icon-file"></i> Logfile</a>{{pass}}</small></h3>
+
+<h3>Alignment Metrics <small>
+<a href="http://picard.sourceforge.net/picard-metric-definitions.shtml#AlignmentSummaryMetrics" target="_blank"><i class="icon-file"></i> Metric Definitions</a> 
+{{ if mult_metrics_stderr: }}<a href="{{=mult_metrics_stderr}}"><i class="icon-file"></i> Log </a>
+{{ elif old_aln_stderr: }}<a href="{{=old_aln_stderr}}"><i class="icon-file"></i> Log </a>
+{{ pass}}
+</small></h3>
 
 <div class="accordion" id="accordion2">
   <div class="accordion-group">

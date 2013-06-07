@@ -99,7 +99,9 @@ current.file_ext = {'mult_metrics_stdout': '.multiple.metrics.stdout.txt',
                     'mult_metrics_stderr': '.multiple.metrics.stderr.txt',
                     'aln_txt': '.alignment_summary_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
                     'aln_stdout': '.alignment_metrics.stdout.txt', # not used by CollectMultipleMetrics
-                    'aln_stderr': '.alignment_metrics.stderr.txt', # not used by CollectMultipleMetrics                   
+                    'aln_stderr': '.alignment_metrics.stderr.txt', # not used by CollectMultipleMetrics
+                    'old_aln_txt': '.AlignmentMetrics.txt', # for back compat with existing AppResults
+                    'old_aln_stderr': '.stderr.txt', # for back compat with existing AppResults                
                     'qual_by_cycle_txt': '.quality_by_cycle_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
                     'qual_by_cycle_pdf': '.quality_by_cycle.pdf', # fixed from CollectMultipleMetrics
                     'qual_by_cycle_png': '.quality_by_cycle.png', # convert pdf to png

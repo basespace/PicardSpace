@@ -875,11 +875,11 @@ def view_alignment_metrics():
                input_app_result_name="", output_app_result_name="", 
                output_project_name="", ar_back="",
                input_project_href="", output_project_href="",
-               mult_metrics_stderr="",
-               qual_by_cycle_pdf="", qual_by_cycle_url="",
-               qual_dist_pdf="", qual_dist_url="",
-               gc_bias_pdf="", gc_bias_url="",
-               insert_size_hist="", insert_size_url="",
+               mult_metrics_stderr="", gc_bias_stderr="", old_aln_stderr="",
+               qual_by_cycle_png="", qual_by_cycle_url="",
+               qual_dist_png="", qual_dist_url="",
+               gc_bias_png="", gc_bias_url="",
+               insert_size_png="", insert_size_url="",
                err_msg="")
     app_session_id = request.get_vars.app_session_id    
     ret['aln_tbl'] = [["data not available"]]
@@ -930,7 +930,22 @@ def view_alignment_metrics():
         ret['mult_metrics_stderr'] = URL("view_textfile", vars=dict(
             file_id = mm_stderr.bs_file_id, 
             app_session_id = app_session_id,
-            back = back))        
+            back = back))
+    # support legacy aln metrics stderr
+    else:
+        oaln_stderr = app_result.get_output_file(file_ext = current.file_ext['old_aln_stderr'])
+        if oaln_stderr:
+            ret['old_aln_stderr'] = URL("view_textfile", vars=dict(
+                file_id = oaln_stderr.bs_file_id, 
+                app_session_id = app_session_id,
+                back = back))
+            
+    gc_stderr = app_result.get_output_file(file_ext = current.file_ext['gc_bias_stderr'])
+    if gc_stderr:
+        ret['gc_bias_stderr'] = URL("view_textfile", vars=dict(
+            file_id = gc_stderr.bs_file_id, 
+            app_session_id = app_session_id,
+            back = back))                
     ret['qual_by_cycle_url'] = URL("view_qual_by_cycle_metrics", vars=dict(
             app_session_id = app_session_id,
             back = back))
@@ -973,6 +988,14 @@ def view_alignment_metrics():
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
         return ret
+    # support legacy aln metrics
+    if not f:
+        try:
+            f = app_result.download_file(file_ext = current.file_ext['old_aln_txt'], 
+                dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
+        except Exception as e:
+            ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
+            return ret
     
     if f:
         # read local file into array (for display in view)
