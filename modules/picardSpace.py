@@ -23,7 +23,7 @@ class File(object):
     """
     def __init__(self, file_name, local_path=None, file_num=None, 
                  bs_file_id=None, app_result_id=None, genome_id=None, 
-                 is_paired_end=None):              
+                 is_paired_end=None, file_type=None):              
         self.file_name = file_name
         self.local_path = local_path # full path including file name
         self.file_num = file_num        
@@ -31,6 +31,7 @@ class File(object):
         self.app_result_id = app_result_id
         self.genome_id = genome_id
         self.is_paired_end = is_paired_end
+        self.file_type = file_type
 
 
     @staticmethod
@@ -45,7 +46,8 @@ class File(object):
                 bs_file_id = row.id,
                 app_result_id = row.app_result_id,
                 genome_id = row.genome_id,
-                is_paired_end = row.is_paired_end)                  
+                is_paired_end = row.is_paired_end,
+                file_type = row.file_type)                  
 
 
     def download_file(self, file_num, local_dir, app_session_id):
@@ -89,7 +91,23 @@ class File(object):
 class AnalysisInputFile(File):
     """
     Class to download, analyze, and write-back results of a single file    
-    """            
+    """
+    @staticmethod
+    def init_from_db(row):
+        """
+        Return an File object from the provided db Row object
+        """
+        return AnalysisInputFile(
+                file_name = row.file_name,
+                local_path = row.local_path,
+                file_num = row.file_num,
+                bs_file_id = row.id,
+                app_result_id = row.app_result_id,
+                genome_id = row.genome_id,
+                is_paired_end = row.is_paired_end,
+                file_type = row.file_type)   
+        
+    
     def download_and_start_analysis(self):
         """
         Download file contents from BaseSpace and queue the file for analysis
@@ -235,7 +253,9 @@ class AppResult(object):
         Write-back the provided timings (timedelta objects) to a file in BaseSpace
         """
         db = current.db
-        time_file = "timing.txt"
+        type_row = db(db.file_type.name=='timing').select().first()
+        time_file = type_row.exts[0]
+        #time_file = "timing.txt"
         ssn_row = db(db.app_session.id==self.app_session_id).select().first()
         scratch_path = self.scratch_path(ssn_row.app_session_num)        
         time_path = os.path.join(scratch_path, time_file)        
@@ -248,7 +268,8 @@ class AppResult(object):
             FT.write("Write-back time: " + str(time_writeback) + "\n")
         f_time = File(app_result_id=self.app_result_id,
                       file_name=time_file,
-                      local_path=time_path)        
+                      local_path=time_path,
+                      file_type='timing')        
         self.output_files.append(f_time)    
         self._writeback_app_result_files()
         # remove local file
@@ -296,16 +317,7 @@ class AppResult(object):
         Run picard tools on a BAM file       
         """
         rv = self._collect_multiple_metrics(input_file)
-        rv = rv and self._collect_gc_bias_metrics(input_file)
-
-        # run individual programs to support command-line flags - not currently supported, also not renaming files or converting pdfs to pngs yet               
-        #rv = self._collect_alignment_metrics(input_file)        
-        #rv = rv and self._mean_quality_by_cycle(input_file)
-        #rv = rv and self._quality_score_distribution(input_file)
-        
-        #if input_file.is_paired_end == 'paired':
-        #    rv = rv and self._collect_insert_size_metrics(input_file)
-                                    
+        rv = rv and self._collect_gc_bias_metrics(input_file)                                            
         return rv
 
 
@@ -315,18 +327,17 @@ class AppResult(object):
         """
         input_path = input_file.local_path
         db = current.db                        
-                        
+
         # assemble output file names and paths
-        outpath_base = input_path                            
-        outpaths = [input_path + current.file_ext['aln_txt'],                    
-                    input_path + current.file_ext['qual_by_cycle_txt'],
-                    input_path + current.file_ext['qual_by_cycle_pdf'],
-                    input_path + current.file_ext['qual_dist_txt'],
-                    input_path + current.file_ext['qual_dist_pdf'], ]
-        outpath_stdout = input_path + current.file_ext['mult_metrics_stdout']
-        outpath_stderr = input_path + current.file_ext['mult_metrics_stderr']                                
+        outpath_base = input_path
+        outpaths = {}
+        for ext in ['aln_txt', 'qual_by_cycle_txt', 'qual_by_cycle_pdf',
+                    'qual_dist_txt', 'qual_dist_pdf', 'mult_metrics_stdout',
+                    'mult_metrics_stderr' ]:
+            type_row = db(db.file_type.name==ext).select().first()
+            outpaths[ext] = input_path + type_row.exts[0]                                                                                                                                
         
-        # assemble picard command and run it
+        # assemble picard command
         jar = os.path.join(current.picard_path, "CollectMultipleMetrics.jar")
         command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),            
@@ -341,8 +352,9 @@ class AppResult(object):
         # calculate insert size metrics only for paired-end reads
         if input_file.is_paired_end == 'paired':
             command.append("PROGRAM=CollectInsertSizeMetrics")
-            outpaths.append(input_path + current.file_ext['insert_size_txt'])
-            outpaths.append(input_path + current.file_ext['insert_size_hist'])
+            for ext in 'insert_size_txt', 'insert_size_hist':
+                type_row = db(db.file_type.name==ext).select().first()
+                outpaths[ext] = input_path + type_row.exts[0]            
         
         # add optional genome if available
         gen_row = db(db.genome.id==input_file.genome_id).select().first()
@@ -354,20 +366,22 @@ class AppResult(object):
         self.update_status('running', 'Collecting multiple metrics')
         
         # run command, write stdout, stderr to files
-        with open(outpath_stdout, "w") as FO:            
-            with open(outpath_stderr, "w") as FE:                                        
+        with open(outpaths['mult_metrics_stdout'], "w") as FO:
+            with open(outpaths['mult_metrics_stderr'], "w") as FE:                                        
                 rcode = call(command, stdout=FO, stderr=FE)   
         
         # rename files with long extensions (can't upload to BaseSpace due to bug)
         # these file don't initially have file extensions (picard's fault) -- add them        
-        paths = [input_path + current.file_ext['aln_txt'], 
-                 input_path + current.file_ext['qual_by_cycle_txt'], 
-                 input_path + current.file_ext['qual_dist_txt'] ]
+        paths = []
+        for ext in 'aln_txt', 'qual_by_cycle_txt', 'qual_dist_txt':
+                type_row = db(db.file_type.name==ext).select().first()
+                paths.append(input_path + type_row.exts[0])        
         for path in paths:
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)
         if input_file.is_paired_end == 'paired':
-            path = input_path + current.file_ext['insert_size_txt']
+            type_row = db(db.file_type.name=='insert_size_txt').select().first()
+            path = input_path + type_row.exts[0]
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)
        
@@ -377,16 +391,23 @@ class AppResult(object):
         if input_file.is_paired_end == 'paired':
             convert.append(['insert_size_hist', 'insert_size_png'])
         
-        for (pdf_ext, png_ext) in convert:        
-            pdf_path = input_path + current.file_ext[pdf_ext]
-            png_path = input_path + current.file_ext[png_ext]
-            cur_outpaths = [ png_path, ]        
+        for (pdf_ext, png_ext) in convert:
+            type_row = db(db.file_type.name==pdf_ext).select().first()
+            pdf_path = input_path + type_row.exts[0]
+            type_row = db(db.file_type.name==png_ext).select().first()
+            png_path = input_path + type_row.exts[0]
+            #cur_outpaths = [ png_path, ]        
             if os.path.exists(pdf_path):
                 command = [ 'convert', '-flatten', pdf_path, png_path ]             
-                self._run_command(command, cur_outpaths)                                            
+                rc = call(command, stdout=None, stderr=None)
+                rcode = rcode and rc
+                self._add_writeback_files( {png_ext:png_path} )                                          
+
+        # truncate grossly long stderr
+        self._truncate_textfile(outpaths['mult_metrics_stderr'])
                 
         # add output files to writeback list
-        self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)
+        self._add_writeback_files(outpaths)
 
         # return true if command was successful
         if rcode == 0:
@@ -394,32 +415,6 @@ class AppResult(object):
         else:
             return(False)  
 
-
-    def _collect_alignment_metrics(self, input_file):    
-        """
-        Run picard's CollectAlignmentSummaryMetrics on a BAM file       
-        """
-        input_path = input_file.local_path
-        db = current.db                
-                
-        # assemble output file names and paths                                                                    
-        outpath_txt = input_path + current.file_ext['aln_txt']
-        outpaths = [outpath_txt,]
-        outpath_stdout = input_path + current.file_ext['aln_stdout']
-        outpath_stderr = input_path + current.file_ext['aln_stderr']
-        
-        # assemble picard command and run it
-        jar = os.path.join(current.picard_path, "CollectAlignmentSummaryMetrics.jar")
-        command = ["java", "-jar", "-Xms1G",
-            os.path.join(current.request.folder, jar),
-            "INPUT=" + input_path, 
-            "OUTPUT=" + outpath_txt, 
-            "VALIDATION_STRINGENCY=LENIENT",
-            "ASSUME_SORTED=true"]
-        
-        self.update_status('running', 'Collecting alignment metrics')
-        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)    
-        
 
     def _collect_gc_bias_metrics(self, input_file):    
         """
@@ -429,21 +424,20 @@ class AppResult(object):
         db = current.db                
                         
         # assemble output file names and paths
-        outpath_txt = input_path + current.file_ext['gc_bias_txt']        
-        outpath_pdf = input_path + current.file_ext['gc_bias_pdf']
-        outpath_sum = input_path + current.file_ext['gc_bias_summary']
-        outpaths = [outpath_txt, outpath_pdf, outpath_sum]               
-        outpath_stdout = input_path + current.file_ext['gc_bias_stdout']
-        outpath_stderr = input_path + current.file_ext['gc_bias_stderr']                            
+        outpaths = {}
+        for ext in ['gc_bias_txt', 'gc_bias_pdf', 'gc_bias_summary',
+                    'gc_bias_stdout', 'gc_bias_stderr' ]:
+            type_row = db(db.file_type.name==ext).select().first()
+            outpaths[ext] = input_path + type_row.exts[0]
 
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "CollectGcBiasMetrics.jar")
         command = ["java", "-jar", "-Xms1G",
             os.path.join(current.request.folder, jar),
             "INPUT=" + input_path, 
-            "OUTPUT=" + outpath_txt,
-            "CHART_OUTPUT=" + outpath_pdf,
-            "SUMMARY_OUTPUT=" + outpath_sum, 
+            "OUTPUT=" + outpaths['gc_bias_txt'],
+            "CHART_OUTPUT=" + outpaths['gc_bias_pdf'],
+            "SUMMARY_OUTPUT=" + outpaths['gc_bias_summary'], 
             "VALIDATION_STRINGENCY=LENIENT",
             "ASSUME_SORTED=true"]
         
@@ -458,28 +452,35 @@ class AppResult(object):
         
         # run command, write stdout, stderr to files
         self.update_status('running', 'Collecting gc-bias metrics')
-        with open(outpath_stdout, "w") as FO:            
-            with open(outpath_stderr, "w") as FE:                                        
+        with open(outpaths['gc_bias_stdout'], "w") as FO:            
+            with open(outpaths['gc_bias_stderr'], "w") as FE:                                        
                 rcode = call(command, stdout=FO, stderr=FE)   
         
         # rename files with long extensions            
-        paths = [input_path + current.file_ext['gc_bias_txt'], ]         
+        paths = [outpaths['gc_bias_txt'], ]         
         for path in paths:
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)        
        
         # convert pdfs to pngs
         convert = [['gc_bias_pdf', 'gc_bias_png'],]        
-        for (pdf_ext, png_ext) in convert:        
-            pdf_path = input_path + current.file_ext[pdf_ext]
-            png_path = input_path + current.file_ext[png_ext]
-            cur_outpaths = [ png_path, ]        
+        for (pdf_ext, png_ext) in convert:
+            type_row = db(db.file_type.name==pdf_ext).select().first()   
+            pdf_path = input_path + type_row.exts[0]            
+            type_row = db(db.file_type.name==png_ext).select().first()
+            png_path = input_path + type_row.exts[0]            
+            #cur_outpaths = [ png_path, ]        
             if os.path.exists(pdf_path):
                 command = [ 'convert', '-flatten', pdf_path, png_path ]             
-                self._run_command(command, cur_outpaths)                                            
+                rc = call(command, stdout=None, stderr=None)
+                rcode = rcode and rc
+                self._add_writeback_files( {png_ext:png_path} )
+                
+        # truncate grossly long stderr
+        self._truncate_textfile(outpaths['gc_bias_stderr'])
                 
         # add output files to writeback list
-        self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)                                                                                                            
+        self._add_writeback_files(outpaths)                                                                                                          
         # return true if command was successful
         if rcode == 0:
             return(True)
@@ -487,158 +488,28 @@ class AppResult(object):
             return(False)  
 
 
-    def _collect_insert_size_metrics(self, input_file):    
+    def _truncate_textfile(self, file_path, max_size=1000000):
         """
-        Run picard's CollectInsertSizeMetrics on a BAM file       
-        """
-        input_path = input_file.local_path
-        db = current.db                
-                        
-        # assemble output file names and paths
-        outpath_txt = input_path + current.file_ext['insert_size_txt']        
-        outpath_hist = input_path + current.file_ext['insert_size_hist']                        
-        outpaths = [outpath_txt, outpath_hist]
-        outpath_stdout = input_path + current.file_ext['insert_size_stdout']
-        outpath_stderr = input_path + current.file_ext['insert_size_stderr']        
-        
-        # assemble picard command and run it
-        jar = os.path.join(current.picard_path, "CollectInsertSizeMetrics.jar")
-        command = ["java", "-jar", "-Xms1G",
-            os.path.join(current.request.folder, jar),            
-            "INPUT=" + input_path, 
-            "OUTPUT=" + outpath_txt,
-            "HISTOGRAM_FILE=" + outpath_hist,             
-            "VALIDATION_STRINGENCY=LENIENT",
-            "ASSUME_SORTED=true"]
-        
-        # add optional genome if available
-        gen_row = db(db.genome.id==input_file.genome_id).select().first()
-        if gen_row:
-            genome_path = os.path.join(current.genomes_path, gen_row.local_path)
-            fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
-            command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
-        
-        self.update_status('running', 'Collecting insert-size metrics')
-        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)          
-
-
-    def _mean_quality_by_cycle(self, input_file):    
-        """
-        Run picard's MeanQualityByCycle on a BAM file       
-        """
-        input_path = input_file.local_path
-        db = current.db                
-                        
-        # assemble output file names and paths
-        outpath_txt = input_path + current.file_ext['qual_by_cycle_txt']        
-        outpath_pdf = input_path + current.file_ext['qual_by_cycle_pdf']                        
-        outpaths = [outpath_txt, outpath_pdf]
-        outpath_stdout = input_path + current.file_ext['qual_by_cycle_stdout']
-        outpath_stderr = input_path + current.file_ext['qual_by_cycle_stderr']        
-        
-        # assemble picard command and run it
-        jar = os.path.join(current.picard_path, "MeanQualityByCycle.jar")
-        command = ["java", "-jar", "-Xms1G",
-            os.path.join(current.request.folder, jar),            
-            "INPUT=" + input_path, 
-            "OUTPUT=" + outpath_txt,
-            "CHART_OUTPUT=" + outpath_pdf,             
-            "VALIDATION_STRINGENCY=LENIENT",
-            "ASSUME_SORTED=true"]
-        
-        # add optional genome if available
-        gen_row = db(db.genome.id==input_file.genome_id).select().first()
-        if gen_row:
-            genome_path = os.path.join(current.genomes_path, gen_row.local_path)
-            fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
-            command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
-        
-        self.update_status('running', 'Calculating mean quality by cycle')
-        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)
-
-
-    def _quality_score_distribution(self, input_file):    
-        """
-        Run picard's QualityScoreDistribution on a BAM file       
-        """
-        input_path = input_file.local_path
-        db = current.db                
-                        
-        # assemble output file names and paths
-        outpath_txt = input_path + current.file_ext['qual_dist_txt']        
-        outpath_pdf = input_path + current.file_ext['qual_dist_pdf']                        
-        outpaths = [outpath_txt, outpath_pdf]
-        outpath_stdout = input_path + current.file_ext['qual_dist_stdout']
-        outpath_stderr = input_path + current.file_ext['qual_dist_stderr']        
-        
-        # assemble picard command and run it
-        jar = os.path.join(current.picard_path, "QualityScoreDistribution.jar")
-        command = ["java", "-jar", "-Xms1G",
-            os.path.join(current.request.folder, jar),            
-            "INPUT=" + input_path, 
-            "OUTPUT=" + outpath_txt,
-            "CHART_OUTPUT=" + outpath_pdf,             
-            "VALIDATION_STRINGENCY=LENIENT",
-            "ASSUME_SORTED=true"]
-        
-        # add optional genome if available
-        gen_row = db(db.genome.id==input_file.genome_id).select().first()
-        if gen_row:
-            genome_path = os.path.join(current.genomes_path, gen_row.local_path)
-            fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
-            command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
-        
-        self.update_status('running', 'Calculating quality score distribution')
-        return self._run_command(command, outpaths, outpath_stdout, outpath_stderr)
-
-
-    def _run_command(self, command, outpaths, outpath_stdout=None, outpath_stderr=None):
-        """
-        Run the provided command (a sequence of program args, don't use a 
-        string), and return the command's return value. 
-        Writeback files in the outpaths list and stdout + stderr
-        """
-        # run command, write stdout, stderr to files
-        FO = None
-        if outpath_stdout:
-            FO = open(outpath_stdout, "w")
-        FE = None
-        if outpath_stderr:            
-            FE = open(outpath_stderr, "w")                                        
-        rcode = call(command, stdout=FO, stderr=FE)
-                
-        self._add_writeback_files(outpaths, outpath_stdout, outpath_stderr)
-
-        # return true if command was successful
-        if rcode == 0:
-            return(True)
-        else:
-            return(False)     
+        Truncate the provided local file to default size of 1 MB
+        """                       
+        if os.path.getsize(file_path) > max_size:
+            with open(file_path, "r+") as FE:
+                FE.truncate(max_size)
+            with open(file_path, "a") as FE:
+                FE.write("[Truncated]")
 
         
-    def _add_writeback_files(self, outpaths, outpath_stdout=None, outpath_stderr=None):
+    def _add_writeback_files(self, outpaths):#, outpath_stdout=None, outpath_stderr=None):
         """
         Add the provided list of output files to the list to writeback to BaseSpace
-        """
-        # add stdout to list if non-empty
-        if outpath_stdout and os.path.getsize(outpath_stdout):
-            outpaths.append(outpath_stdout)
-            
-        if outpath_stderr and os.path.getsize(outpath_stderr):        
-            # truncate grossly long stderr (> 1 MB)
-            if os.path.getsize(outpath_stderr) > 1000000:
-                with open(outpath_stderr, "r+") as FE:
-                    FE.truncate(1000000)
-                with open(outpath_stderr, "a") as FE:
-                    FE.write("[Truncated]")
-            outpaths.append(outpath_stderr)           
-                        
-        # add output files to writeback list        
-        for path in outpaths:    
+        """                        
+        # add non-empty output files to writeback list        
+        for file_type, path in outpaths.iteritems():    
             if (os.path.exists(path) and os.path.getsize(path)):           
                 f = File(app_result_id=self.app_result_id,
                     file_name=os.path.split(path)[1],
-                    local_path=path)
+                    local_path=path,
+                    file_type=file_type)
                 self.output_files.append(f)                                                                           
 
 
@@ -662,64 +533,71 @@ class AppResult(object):
             db.output_file.insert(app_result_id=f.app_result_id,
                                   file_num=bs_file.Id, 
                                   file_name=f.file_name, 
-                                  local_path=f.local_path)                                   
+                                  local_path=f.local_path,
+                                  file_type=f.file_type)                                   
             db.commit()
 
-
-    def download_file(self, file_ext, dest_path):
+    
+    def download_file(self, file_type, dest_path):
         """
-        Downloads file with provided extension from BaseSpace to provided destination path 
-        """
-        db = current.db
-        # get output file info from db    
-        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
-        f_row = None
-        for row in f_rows:
-            # find file with aln metrics extension
-            m = re.search(file_ext + "$", row.file_name)
-            if m:
-                f_row = row
-                break
-        if f_row:
-            f = File.init_from_db(f_row)                                                                     
-            f.download_file(f_row.file_num, dest_path, self.app_session_id)                  
-            return f
-
-
-    def get_file_url(self, file_ext):
-        """
-        Returns S3 link of file with provided extension 
+        Downloads file of the provided type from BaseSpace to provided destination path        
         """
         db = current.db
+                                                    
+        # get output file and file type info from db    
         f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
-        f_row = None
-        for row in f_rows:
-            # find file with provided extension
-            m = re.search(file_ext + "$", row.file_name)
-            if m:
-                f_row = row
-                break
-        if f_row:                    
-            f = File.init_from_db(f_row)                                                    
-            return f.get_file_url(f_row.file_num, self.app_session_id)            
+        type_row = db(db.file_type.name==file_type).select().first()
+        for file_ext in type_row.exts:    
+            f_row = None
+            for row in f_rows:
+                # find file with aln metrics extension
+                m = re.search(file_ext + "$", row.file_name)
+                if m:
+                    f_row = row
+                    break
+            if f_row:
+                f = File.init_from_db(f_row)                                                                     
+                f.download_file(f_row.file_num, dest_path, self.app_session_id)                  
+                return f
 
 
-    def get_output_file(self, file_ext):
+    def get_file_url(self, file_type):
         """
-        Returns a file object for the file with provided extension in this app result 
+        Returns S3 link of file with the provided type 
+        """
+        db = current.db        
+        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
+        type_row = db(db.file_type.name==file_type).select().first()
+        for file_ext in type_row.exts:            
+            f_row = None
+            for row in f_rows:
+                # find file with provided extension
+                m = re.search(file_ext + "$", row.file_name)
+                if m:
+                    f_row = row
+                    break
+            if f_row:                    
+                f = File.init_from_db(f_row)                                                    
+                return f.get_file_url(f_row.file_num, self.app_session_id)            
+
+
+    def get_output_file(self, *file_ext):
+        """
+        Returns a file object for the file with provided extension(s --in priority order) in this app result        
         """
         db = current.db
         f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
         f_row = None
-        for row in f_rows:
-            # find file with provided extension
-            m = re.search(file_ext + "$", row.file_name)
-            if m:
-                f_row = row
-                break
-        if f_row:
-            f = File.init_from_db(f_row)            
-            return f                          
+        for ext in file_ext:
+            for row in f_rows:
+                # find file with provided extension
+                m = re.search(ext + "$", row.file_name)
+                if m:
+                    f_row = row
+                    break
+            if f_row:
+                f = File.init_from_db(f_row)            
+                return f                          
 
 
 class ProductPurchase(object):
@@ -818,14 +696,15 @@ def analyze_bs_file(input_file_id):
     ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
 
     # create a File object
-    als_file = AnalysisInputFile(
-        app_result_id=f_row.app_result_id,
-        is_paired_end=f_row.is_paired_end,
-        genome_id=f_row.genome_id,
-        bs_file_id=f_row.id,
-        file_num=f_row.file_num,
-        file_name=f_row.file_name,
-        local_path=f_row.local_path)
+    als_file = AnalysisInputFile.init_from_db(f_row)                                                                     
+    #als_file = AnalysisInputFile(
+    #    app_result_id=f_row.app_result_id,
+    #    is_paired_end=f_row.is_paired_end,
+    #    genome_id=f_row.genome_id,
+    #    bs_file_id=f_row.id,
+    #    file_num=f_row.file_num,
+    #    file_name=f_row.file_name,
+    #    local_path=f_row.local_path)
 
     # download the file from BaseSpace and queue analysis
     try:

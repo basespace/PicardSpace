@@ -875,7 +875,7 @@ def view_alignment_metrics():
                input_app_result_name="", output_app_result_name="", 
                output_project_name="", ar_back="",
                input_project_href="", output_project_href="",
-               mult_metrics_stderr="", gc_bias_stderr="", old_aln_stderr="",
+               mult_metrics_stderr="", gc_bias_stderr="", aln_stderr="",
                qual_by_cycle_png="", qual_by_cycle_url="",
                qual_dist_png="", qual_dist_url="",
                gc_bias_png="", gc_bias_url="",
@@ -896,7 +896,8 @@ def view_alignment_metrics():
     output_ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
     input_file_row = db(db.input_file.id==output_ar_row.input_file_id).select().first()
     input_ar_row = db(db.input_app_result.id==input_file_row.app_result_id).select().first()
-    app = db(db.app_data.id > 0).select().first()    
+    app = db(db.app_data.id > 0).select().first()
+        
                 
     # get Sample and Project from BaseSpace
     try:
@@ -922,25 +923,29 @@ def view_alignment_metrics():
             
     # get BaseSpace links to output files
     app_result = AppResult.init_from_db(output_ar_row)
+    
         
     # generate urls to individual metrics tables and stderr
-    back = URL('view_alignment_metrics', vars=dict(app_session_id=app_session_id, ar_back=ret['ar_back']))    
-    mm_stderr = app_result.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    back = URL('view_alignment_metrics', vars=dict(app_session_id=app_session_id, ar_back=ret['ar_back']))
+    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()     
+    mm_stderr = app_result.get_output_file(*type_row.exts)
     if mm_stderr:
         ret['mult_metrics_stderr'] = URL("view_textfile", vars=dict(
             file_id = mm_stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = back))
-    # support legacy aln metrics stderr
+    # support standalone aln metrics stderr
     else:
-        oaln_stderr = app_result.get_output_file(file_ext = current.file_ext['old_aln_stderr'])
+        type_row = db(db.file_type.name=='aln_stderr').select().first()
+        oaln_stderr = app_result.get_output_file(*type_row.exts)
         if oaln_stderr:
-            ret['old_aln_stderr'] = URL("view_textfile", vars=dict(
+            ret['aln_stderr'] = URL("view_textfile", vars=dict(
                 file_id = oaln_stderr.bs_file_id, 
                 app_session_id = app_session_id,
                 back = back))
             
-    gc_stderr = app_result.get_output_file(file_ext = current.file_ext['gc_bias_stderr'])
+    type_row = db(db.file_type.name=='gc_bias_stderr').select().first()
+    gc_stderr = app_result.get_output_file(*type_row.exts)
     if gc_stderr:
         ret['gc_bias_stderr'] = URL("view_textfile", vars=dict(
             file_id = gc_stderr.bs_file_id, 
@@ -961,41 +966,33 @@ def view_alignment_metrics():
     
     # get links to image files
     try:
-        ret['qual_by_cycle_png'] = app_result.get_file_url(file_ext = current.file_ext['qual_by_cycle_png'])
+        ret['qual_by_cycle_png'] = app_result.get_file_url('qual_by_cycle_png')
     except Exception as e:
         ret['err_msg'] = "Error retrieving qual by cycle file link from BaseSpace: " + str(e)
         return ret        
     try:
-        ret['qual_dist_png'] = app_result.get_file_url(file_ext = current.file_ext['qual_dist_png'])        
+        ret['qual_dist_png'] = app_result.get_file_url('qual_dist_png')        
     except Exception as e:
         ret['err_msg'] = "Error retrieving qual dist file link from BaseSpace: " + str(e)
         return ret        
     try:
-        ret['gc_bias_png'] = app_result.get_file_url(file_ext = current.file_ext['gc_bias_png'])
+        ret['gc_bias_png'] = app_result.get_file_url('gc_bias_png')
     except Exception as e:
         ret['err_msg'] = "Error retrieving gc bias file link from BaseSpace: " + str(e)
         return ret        
     try:
-        ret['insert_size_png'] = app_result.get_file_url(file_ext = current.file_ext['insert_size_png'])
+        ret['insert_size_png'] = app_result.get_file_url('insert_size_png')
     except Exception as e:
         ret['err_msg'] = "Error retrieving insert size file link from BaseSpace: " + str(e)
         return ret            
     
     # get alignment metrics table
     try:
-        f = app_result.download_file(file_ext = current.file_ext['aln_txt'], 
+        f = app_result.download_file(file_type = 'aln_txt',
             dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
-        return ret
-    # support legacy aln metrics
-    if not f:
-        try:
-            f = app_result.download_file(file_ext = current.file_ext['old_aln_txt'], 
-                dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
-        except Exception as e:
-            ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
-            return ret
+        return ret    
     
     if f:
         # read local file into array (for display in view)
@@ -1097,26 +1094,19 @@ def view_qual_by_cycle_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    stderr = ar.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()
+    stderr = ar.get_output_file(*type_row.exts)
     ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_qual_by_cycle_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
     # get output text file
     try:
-        f = ar.download_file(file_ext = current.file_ext['qual_by_cycle_txt'], 
+        f = ar.download_file(file_type = 'qual_by_cycle_txt',
             dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
         return ret                
-    
-    # get urls of output images
-#    try:
-#        ret['qual_by_cycle_png'] = ar.get_file_url(file_ext = current.file_ext['qual_by_cycle_png'])
-#        ret['qual_by_cycle_pdf'] = ar.get_file_url(file_ext = current.file_ext['qual_by_cycle_pdf'])
-#    except Exception as e:
-#        ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
-#        return ret        
         
     ret['data_tbl'] = [["data not available"]]            
     if f:
@@ -1166,26 +1156,19 @@ def view_qual_dist_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    stderr = ar.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()
+    stderr = ar.get_output_file(*type_row.exts)
     ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_qual_dist_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
     # get output text file
     try:
-        f = ar.download_file(file_ext = current.file_ext['qual_dist_txt'], 
+        f = ar.download_file(file_type = 'qual_dist_txt',                            
             dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
-        return ret                
-    
-    # get urls of output images
-#    try:
-#        ret['qual_dist_png'] = ar.get_file_url(file_ext = current.file_ext['qual_dist_png'])
-#        ret['qual_dist_pdf'] = ar.get_file_url(file_ext = current.file_ext['qual_dist_pdf'])
-#    except Exception as e:
-#        ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
-#        return ret        
+        return ret                            
                     
     ret['data_tbl'] = [["data not available"]]         
     if f:
@@ -1235,32 +1218,25 @@ def view_gc_bias_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    stderr = ar.get_output_file(file_ext = current.file_ext['gc_bias_stderr'])
+    type_row = db(db.file_type.name=='gc_bias_stderr').select().first()
+    stderr = ar.get_output_file(*type_row.exts)
     ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_gc_bias_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
     # get output text files - summary and histogram values
     try:
-        sf = ar.download_file(file_ext = current.file_ext['gc_bias_summary'], 
+        sf = ar.download_file(file_type = 'gc_bias_summary',                              
             dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
         return ret                    
     try:
-        hf = ar.download_file(file_ext = current.file_ext['gc_bias_txt'], 
+        hf = ar.download_file(file_type = 'gc_bias_txt',                               
             dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
-        return ret
-    
-    # get urls of output images
-    #try:
-    #    ret['gc_bias_png'] = ar.get_file_url(file_ext = current.file_ext['gc_bias_png'])
-    #    ret['gc_bias_pdf'] = ar.get_file_url(file_ext = current.file_ext['gc_bias_pdf'])
-    #except Exception as e:
-    #    ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
-    #    return ret         
+        return ret                
                
     # first parse summary metrics file (then histogram data file)
     ret['hdr'] += 'GC Bias Summary Values:\n'     
@@ -1329,26 +1305,19 @@ def view_insert_size_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    stderr = ar.get_output_file(file_ext = current.file_ext['mult_metrics_stderr'])
+    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()
+    stderr = ar.get_output_file(*type_row.exts)
     ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_insert_size_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
     # get output text file
     try:
-        f = ar.download_file(file_ext = current.file_ext['insert_size_txt'], 
+        f = ar.download_file(file_type = 'insert_size_txt',                              
             dest_path = os.path.join(current.scratch_path, "viewing", str(ssn_row.app_session_num)))
     except Exception as e:
         ret['err_msg'] = "Error downloading file from BaseSpace: " + str(e)
-        return ret                
-    
-    # get urls of output images
-#    try:
-#        ret['insert_size_png'] = ar.get_file_url(file_ext = current.file_ext['insert_size_png'])
-#        ret['insert_size_pdf'] = ar.get_file_url(file_ext = current.file_ext['insert_size_pdf'])
-#    except Exception as e:
-#        ret['err_msg'] = "Error retrieving file url from BaseSpace: " + str(e)
-#        return ret        
+        return ret                            
                     
     ret['hist_tbl'] = [["data not available"]]
     ret['data_tbl'] = [["data not available"]]                            

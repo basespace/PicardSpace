@@ -95,35 +95,77 @@ auth.settings.expiration = 3600  # seconds
 # define global vars
 current.debug_ps = False
 current.product_names = {'AlignmentQC':'AlignmentQC'}
-current.file_ext = {'mult_metrics_stdout': '.multiple.metrics.stdout.txt',
-                    'mult_metrics_stderr': '.multiple.metrics.stderr.txt',
-                    'aln_txt': '.alignment_summary_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-                    'aln_stdout': '.alignment_metrics.stdout.txt', # not used by CollectMultipleMetrics
-                    'aln_stderr': '.alignment_metrics.stderr.txt', # not used by CollectMultipleMetrics
-                    'old_aln_txt': '.AlignmentMetrics.txt', # for back compat with existing AppResults
-                    'old_aln_stderr': '.stderr.txt', # for back compat with existing AppResults                
-                    'qual_by_cycle_txt': '.quality_by_cycle_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-                    'qual_by_cycle_pdf': '.quality_by_cycle.pdf', # fixed from CollectMultipleMetrics
-                    'qual_by_cycle_png': '.quality_by_cycle.png', # convert pdf to png
-                    'qual_by_cycle_stdout': '.qual_by_cycle.stdout.txt', # not used by CollectMultipleMetrics
-                    'qual_by_cycle_stderr': '.qual_by_cycle.stderr.txt', # not used by CollectMultipleMetrics
-                    'qual_dist_txt': '.quality_distribution_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-                    'qual_dist_pdf': '.quality_distribution.pdf', # fixed from CollectMultipleMetrics
-                    'qual_dist_png': '.quality_distribution.png', # convert pdf to png
-                    'qual_dist_stdout': '.qual_distribution.stdout.txt', # not used by CollectMultipleMetrics
-                    'qual_dist_stderr': '.qual_distribution.stderr.txt', # not used by CollectMultipleMetrics
-                    'gc_bias_txt': '.gc_bias_metrics.txt',
-                    'gc_bias_pdf': '.gc_bias_metrics.pdf',
-                    'gc_bias_png': '.gc_bias_metrics.png', # convert pdf to png
-                    'gc_bias_summary': '.gc_bias_metrics.summary_metrics.txt',
-                    'gc_bias_stdout': '.gc_bias_metrics.stdout.txt',
-                    'gc_bias_stderr': '.gc_bias_metrics.stderr.txt',
-                    'insert_size_txt': '.insert_size_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-                    'insert_size_hist': '.insert_size_histogram.pdf', # fixed from CollectMultipleMetrics
-                    'insert_size_png': '.insert_size_histogram.png', # convert pdf to png
-                    'insert_size_stdout': '.insert_size_metrics.stdout.txt', # not used by CollectMultipleMetrics
-                    'insert_size_stderr': '.insert_size_metrics.stderr.txt', # not used by CollectMultipleMetrics
-                    }        
+#current.file_ext = {'mult_metrics_stdout': '.multiple.metrics.stdout.txt',
+#                    'mult_metrics_stderr': '.multiple.metrics.stderr.txt',
+#                    'aln_txt': '.alignment_summary_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+#                    'aln_stdout': '.alignment_metrics.stdout.txt', # not used by CollectMultipleMetrics
+#                    'aln_stderr': '.alignment_metrics.stderr.txt', # not used by CollectMultipleMetrics
+#                    'old_aln_txt': '.AlignmentMetrics.txt', # for back compat with existing AppResults
+#                    'old_aln_stderr': '.stderr.txt', # for back compat with existing AppResults                
+#                    'qual_by_cycle_txt': '.quality_by_cycle_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+#                    'qual_by_cycle_pdf': '.quality_by_cycle.pdf', # fixed from CollectMultipleMetrics
+#                    'qual_by_cycle_png': '.quality_by_cycle.png', # convert pdf to png
+#                    'qual_by_cycle_stdout': '.qual_by_cycle.stdout.txt', # not used by CollectMultipleMetrics
+#                    'qual_by_cycle_stderr': '.qual_by_cycle.stderr.txt', # not used by CollectMultipleMetrics
+#                    'qual_dist_txt': '.quality_distribution_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+#                    'qual_dist_pdf': '.quality_distribution.pdf', # fixed from CollectMultipleMetrics
+#                    'qual_dist_png': '.quality_distribution.png', # convert pdf to png
+#                    'qual_dist_stdout': '.qual_distribution.stdout.txt', # not used by CollectMultipleMetrics
+#                    'qual_dist_stderr': '.qual_distribution.stderr.txt', # not used by CollectMultipleMetrics
+#                    'gc_bias_txt': '.gc_bias_metrics.txt',
+#                    'gc_bias_pdf': '.gc_bias_metrics.pdf',
+#                    'gc_bias_png': '.gc_bias_metrics.png', # convert pdf to png
+#                    'gc_bias_summary': '.gc_bias_metrics.summary_metrics.txt',
+#                    'gc_bias_stdout': '.gc_bias_metrics.stdout.txt',
+#                    'gc_bias_stderr': '.gc_bias_metrics.stderr.txt',
+#                    'insert_size_txt': '.insert_size_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+#                    'insert_size_hist': '.insert_size_histogram.pdf', # fixed from CollectMultipleMetrics
+#                    'insert_size_png': '.insert_size_histogram.png', # convert pdf to png
+#                    'insert_size_stdout': '.insert_size_metrics.stdout.txt', # not used by CollectMultipleMetrics
+#                    'insert_size_stderr': '.insert_size_metrics.stderr.txt', # not used by CollectMultipleMetrics
+#                    }        
+
+# file extensions for output files; the first extension in each list is used for newly created files
+# NOTE that after the db table is created, changes to this list be made manually in the db
+file_exts =[{'name':'mult_metrics_stdout', 'exts': [ '.multiple.metrics.stdout.txt'] },
+            {'name':'mult_metrics_stderr', 'exts': ['.multiple.metrics.stderr.txt']},
+            {'name':'aln_txt', 'exts': ['.alignment_summary_metrics.txt', '.AlignmentMetrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'aln_stdout', 'exts': ['.alignment_metrics.stdout.txt']}, # not used by CollectMultipleMetrics
+            {'name':'aln_stderr', 'exts': ['.alignment_metrics.stderr.txt', '.stderr.txt']}, # not used by CollectMultipleMetrics                                    
+            {'name':'qual_by_cycle_txt', 'exts': ['.quality_by_cycle_metrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'qual_by_cycle_pdf', 'exts': ['.quality_by_cycle.pdf']}, # fixed from CollectMultipleMetrics
+            {'name':'qual_by_cycle_png', 'exts': ['.quality_by_cycle.png']}, # convert pdf to png
+            {'name':'qual_by_cycle_stdout', 'exts': ['.qual_by_cycle.stdout.txt']}, # not used by CollectMultipleMetrics
+            {'name':'qual_by_cycle_stderr', 'exts': ['.qual_by_cycle.stderr.txt']}, # not used by CollectMultipleMetrics
+            {'name':'qual_dist_txt', 'exts': ['.quality_distribution_metrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'qual_dist_pdf', 'exts': ['.quality_distribution.pdf']}, # fixed from CollectMultipleMetrics
+            {'name':'qual_dist_png', 'exts': ['.quality_distribution.png']}, # convert pdf to png
+            {'name':'qual_dist_stdout', 'exts': ['.qual_distribution.stdout.txt']}, # not used by CollectMultipleMetrics
+            {'name':'qual_dist_stderr', 'exts': ['.qual_distribution.stderr.txt']}, # not used by CollectMultipleMetrics
+            {'name':'gc_bias_txt', 'exts': ['.gc_bias_metrics.txt']},
+            {'name':'gc_bias_pdf', 'exts': ['.gc_bias_metrics.pdf']},
+            {'name':'gc_bias_png', 'exts': ['.gc_bias_metrics.png']}, # convert pdf to png
+            {'name':'gc_bias_summary', 'exts': ['.gc_bias_metrics.summary_metrics.txt']},
+            {'name':'gc_bias_stdout', 'exts': ['.gc_bias_metrics.stdout.txt']},
+            {'name':'gc_bias_stderr', 'exts': ['.gc_bias_metrics.stderr.txt']},
+            {'name':'insert_size_txt', 'exts': ['.insert_size_metrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'insert_size_hist', 'exts': ['.insert_size_histogram.pdf']}, # fixed from CollectMultipleMetrics
+            {'name':'insert_size_png', 'exts': ['.insert_size_histogram.png']}, # convert pdf to png
+            {'name':'insert_size_stdout', 'exts': ['.insert_size_metrics.stdout.txt']}, # not used by CollectMultipleMetrics
+            {'name':'insert_size_stderr', 'exts': ['.insert_size_metrics.stderr.txt']}, # not used by CollectMultipleMetrics
+            {'name':'timing', 'exts': ['timing.txt']}
+           ]        
+
+db.define_table('file_type',
+    Field('name'),    
+    Field('exts', 'list:string')) # the first list entry is used for newly created files
+
+# populate output_file_type table if not done already
+file_type = db(db.file_type.id > 0).select().first()
+if not file_type:    
+    db.file_type.bulk_insert(file_exts)
+
+
 
 # genomes keyed by BaseSpace genome id
 #current.genomes = {                   
@@ -154,7 +196,7 @@ db.define_table('app_data',
     Field('store_url', default='https://hoth-store.basespace.illumina.com/'),
     Field('google_analytics_id'))
 
-# create an instance of app_data table if not present
+# populate app_data table if not done already
 app_data = db(db.app_data.id > 0).select().first()
 if not app_data:
     app_data = db.app_data.insert()
@@ -168,6 +210,7 @@ if app_data.google_analytics_id:
 p_url = urlparse(app_data.auth_url)
 auth.settings.logout_next = p_url.scheme + "://" + p_url.netloc
 del app_data, p_url
+
 
 
 
@@ -324,7 +367,8 @@ db.define_table('input_file',
     Field('genome_id', db.genome),
     Field('file_num'),
     Field('file_name'),
-    Field('local_path'))    
+    Field('local_path'),
+    Field('file_type'), db.file_type)   # currently unused, but needed for shared File class with output files    
 
 db.define_table('output_app_result',    # newly created AppResult for PicardSpace's output files
     Field('app_session_id', db.app_session),
@@ -340,7 +384,8 @@ db.define_table('output_file',
     Field('genome_id', db.genome),      # currently unused
     Field('file_num'),                  
     Field('file_name'),
-    Field('local_path'))
+    Field('local_path'),
+    Field('file_type'), db.file_type)
 
 db.define_table('product',              # products for billing, corresponding to manually created products in BaseSpace dev portal
     Field('name'),
