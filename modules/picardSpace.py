@@ -255,7 +255,6 @@ class AppResult(object):
         db = current.db
         type_row = db(db.file_type.name=='timing').select().first()
         time_file = type_row.exts[0]
-        #time_file = "timing.txt"
         ssn_row = db(db.app_session.id==self.app_session_id).select().first()
         scratch_path = self.scratch_path(ssn_row.app_session_num)        
         time_path = os.path.join(scratch_path, time_file)        
@@ -542,23 +541,13 @@ class AppResult(object):
         """
         Downloads file of the provided type from BaseSpace to provided destination path        
         """
-        db = current.db
-                                                    
-        # get output file and file type info from db    
-        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
-        type_row = db(db.file_type.name==file_type).select().first()
-        for file_ext in type_row.exts:    
-            f_row = None
-            for row in f_rows:
-                # find file with aln metrics extension
-                m = re.search(file_ext + "$", row.file_name)
-                if m:
-                    f_row = row
-                    break
-            if f_row:
-                f = File.init_from_db(f_row)                                                                     
-                f.download_file(f_row.file_num, dest_path, self.app_session_id)                  
-                return f
+        db = current.db                                                
+        f_row = db((db.output_file.app_result_id==self.app_result_id) &
+                    (db.output_file.file_type==file_type)).select().first()
+        if f_row:
+            f = File.init_from_db(f_row)                                                                     
+            f.download_file(f_row.file_num, dest_path, self.app_session_id)                  
+            return f                        
 
 
     def get_file_url(self, file_type):
@@ -566,38 +555,23 @@ class AppResult(object):
         Returns S3 link of file with the provided type 
         """
         db = current.db        
-        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
-        type_row = db(db.file_type.name==file_type).select().first()
-        for file_ext in type_row.exts:            
-            f_row = None
-            for row in f_rows:
-                # find file with provided extension
-                m = re.search(file_ext + "$", row.file_name)
-                if m:
-                    f_row = row
-                    break
-            if f_row:                    
-                f = File.init_from_db(f_row)                                                    
-                return f.get_file_url(f_row.file_num, self.app_session_id)            
+        f_row = db((db.output_file.app_result_id==self.app_result_id) &
+                    (db.output_file.file_type==file_type)).select().first()
+        if f_row:                    
+            f = File.init_from_db(f_row)                                                    
+            return f.get_file_url(f_row.file_num, self.app_session_id)            
 
 
-    def get_output_file(self, *file_ext):
+    def get_output_file(self, file_type):
         """
-        Returns a file object for the file with provided extension(s --in priority order) in this app result        
+        Returns a file object for the file of the provided type in this app result, if present
         """
         db = current.db
-        f_rows = db(db.output_file.app_result_id==self.app_result_id).select()
-        f_row = None
-        for ext in file_ext:
-            for row in f_rows:
-                # find file with provided extension
-                m = re.search(ext + "$", row.file_name)
-                if m:
-                    f_row = row
-                    break
-            if f_row:
+        f_row = db((db.output_file.app_result_id==self.app_result_id) &
+            (db.output_file.file_type==file_type)).select().first()
+        if f_row:
                 f = File.init_from_db(f_row)            
-                return f                          
+                return f                        
 
 
 class ProductPurchase(object):
@@ -694,19 +668,9 @@ def analyze_bs_file(input_file_id):
     f_row = db(db.input_file.id==input_file_id).select().first()
     ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
     ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
-
-    # create a File object
-    als_file = AnalysisInputFile.init_from_db(f_row)                                                                     
-    #als_file = AnalysisInputFile(
-    #    app_result_id=f_row.app_result_id,
-    #    is_paired_end=f_row.is_paired_end,
-    #    genome_id=f_row.genome_id,
-    #    bs_file_id=f_row.id,
-    #    file_num=f_row.file_num,
-    #    file_name=f_row.file_name,
-    #    local_path=f_row.local_path)
-
+                                                                         
     # download the file from BaseSpace and queue analysis
+    als_file = AnalysisInputFile.init_from_db(f_row)
     try:
         als_file.download_and_start_analysis()
     except Exception as e:            

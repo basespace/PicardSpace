@@ -704,17 +704,17 @@ def start_analysis():
     try:    
         match = re.search('genomes/(\d+)$', sample.HrefGenome)
     except AttributeError:
-        genome_id = 0
+        genome_id = None
     else:
         if not match:
-            genome_id = 0        
+            genome_id = None        
         else:
             genome_num = match.group(1)
             gen_row = db(db.genome.genome_num==genome_num).select().first()                    
             if gen_row:
                 genome_id = gen_row.id
             else:
-                genome_id =  0 # zero entry is unsupported or unknown genome 
+                genome_id = None # null entry is unsupported or unknown genome 
                 
     # clean app result name - only allow alpha, numeric, spaces, and a few symbols
     ar_name = re.sub("[^ a-zA-Z0-9_.,()\[\]+-]", "", ar_name.strip())        
@@ -926,26 +926,23 @@ def view_alignment_metrics():
     
         
     # generate urls to individual metrics tables and stderr
-    back = URL('view_alignment_metrics', vars=dict(app_session_id=app_session_id, ar_back=ret['ar_back']))
-    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()     
-    mm_stderr = app_result.get_output_file(*type_row.exts)
+    back = URL('view_alignment_metrics', vars=dict(app_session_id=app_session_id, ar_back=ret['ar_back']))    
+    mm_stderr = app_result.get_output_file('mult_metrics_stderr')    
     if mm_stderr:
         ret['mult_metrics_stderr'] = URL("view_textfile", vars=dict(
             file_id = mm_stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = back))
     # support standalone aln metrics stderr
-    else:
-        type_row = db(db.file_type.name=='aln_stderr').select().first()
-        oaln_stderr = app_result.get_output_file(*type_row.exts)
+    else:        
+        oaln_stderr = app_result.get_output_file('aln_stderr')
         if oaln_stderr:
             ret['aln_stderr'] = URL("view_textfile", vars=dict(
                 file_id = oaln_stderr.bs_file_id, 
                 app_session_id = app_session_id,
                 back = back))
             
-    type_row = db(db.file_type.name=='gc_bias_stderr').select().first()
-    gc_stderr = app_result.get_output_file(*type_row.exts)
+    gc_stderr = app_result.get_output_file('gc_bias_stderr')
     if gc_stderr:
         ret['gc_bias_stderr'] = URL("view_textfile", vars=dict(
             file_id = gc_stderr.bs_file_id, 
@@ -1078,7 +1075,7 @@ def view_qual_by_cycle_metrics():
     """
     Display picard's quality by cycle metrics
     """
-    ret = dict(back="", data_tbl="", hdr="", sample_name="", err_msg="")
+    ret = dict(back="", data_tbl="", hdr="", sample_name="", stderr="", err_msg="")
     
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1094,9 +1091,9 @@ def view_qual_by_cycle_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()
-    stderr = ar.get_output_file(*type_row.exts)
-    ret['stderr'] = URL("view_textfile", vars=dict(
+    stderr = ar.get_output_file('mult_metrics_stderr')
+    if stderr:
+        ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_qual_by_cycle_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
@@ -1140,7 +1137,7 @@ def view_qual_dist_metrics():
     """
     Display picard's quality distribution metrics
     """
-    ret = dict(back="", data_tbl="", hdr="", sample_name="", err_msg="")
+    ret = dict(back="", data_tbl="", hdr="", sample_name="", stderr="", err_msg="")
     
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1156,9 +1153,9 @@ def view_qual_dist_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()
-    stderr = ar.get_output_file(*type_row.exts)
-    ret['stderr'] = URL("view_textfile", vars=dict(
+    stderr = ar.get_output_file('mult_metrics_stderr')
+    if stderr:
+        ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_qual_dist_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
@@ -1202,7 +1199,7 @@ def view_gc_bias_metrics():
     """
     Display picard's gc-bias summary and histogram metrics
     """
-    ret = dict(back = "", sum_tbl="", hist_tbl="", hdr="", sample_name="", err_msg="")        
+    ret = dict(back = "", sum_tbl="", hist_tbl="", hdr="", sample_name="", stderr="", err_msg="")        
     
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1218,9 +1215,9 @@ def view_gc_bias_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    type_row = db(db.file_type.name=='gc_bias_stderr').select().first()
-    stderr = ar.get_output_file(*type_row.exts)
-    ret['stderr'] = URL("view_textfile", vars=dict(
+    stderr = ar.get_output_file('gc_bias_stderr')
+    if stderr:
+        ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_gc_bias_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    
@@ -1289,7 +1286,7 @@ def view_insert_size_metrics():
     """
     Display picard's insert size metrics
     """
-    ret = dict(back = "", hist_tbl="", data_tbl="", hdr="", sample_name="", err_msg="")    
+    ret = dict(back = "", hist_tbl="", data_tbl="", hdr="", sample_name="", stderr="", err_msg="")    
 
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1305,9 +1302,9 @@ def view_insert_size_metrics():
     ar = AppResult.init_from_db(ar_row)        
     
     # get stderr 'LOG'
-    type_row = db(db.file_type.name=='mult_metrics_stderr').select().first()
-    stderr = ar.get_output_file(*type_row.exts)
-    ret['stderr'] = URL("view_textfile", vars=dict(
+    stderr = ar.get_output_file('mult_metrics_stderr')
+    if stderr:
+        ret['stderr'] = URL("view_textfile", vars=dict(
             file_id = stderr.bs_file_id, 
             app_session_id = app_session_id,
             back = URL('view_insert_size_metrics', vars=dict(app_session_id = app_session_id, back = ret['back']))))    

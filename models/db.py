@@ -164,6 +164,7 @@ db.define_table('file_type',
 file_type = db(db.file_type.id > 0).select().first()
 if not file_type:    
     db.file_type.bulk_insert(file_exts)
+    db.commit()
 
 
 
@@ -200,6 +201,7 @@ db.define_table('app_data',
 app_data = db(db.app_data.id > 0).select().first()
 if not app_data:
     app_data = db.app_data.insert()
+    db.commit()
 
 # set google analytics id
 response.google_analytics_id = None

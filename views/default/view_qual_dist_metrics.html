@@ -3,7 +3,7 @@
 
 <p><small><a href="{{=back}}"><i class="icon-arrow-left"></i> Back</a></small></p>
 
-<h3>Quality Distribution Metrics<small> <a href="{{=stderr}}"><i class="icon-file"></i> Logfile</a></small></h3>
+<h3>Quality Distribution Metrics{{if stderr:}}<small> <a href="{{=stderr}}"><i class="icon-file"></i> Log</a></small>{{pass}}</h3>
 
 <p class="text-error lead">{{=err_msg}}</p>
 

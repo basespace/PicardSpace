@@ -15,10 +15,14 @@
 
 <!-- build link for AppResult data, if any -->
 {{if i['link_to_results']:}}
-  {{rurl = A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id'], 'ar_back': ar_back} ))}}
-  {{proj = i['project_name']}}
-  {{date = i['date_created']}}
   {{status = i['status']}}
+  {{if ((status == 'complete') or (status == 'aborted')):}}
+    {{rurl = A(i['app_result_name'],_href=URL('view_alignment_metrics', vars={'app_session_id': i['app_session_id'], 'ar_back': ar_back} ))}}
+  {{else:}}
+    {{rurl = i['app_result_name']}}
+  {{pass}}
+  {{proj = i['project_name']}}
+  {{date = i['date_created']}}  
   {{notes = i['notes']}}
   
   <!-- set row color based on status -->
