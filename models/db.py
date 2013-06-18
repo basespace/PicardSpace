@@ -127,43 +127,43 @@ current.product_names = {'AlignmentQC':'AlignmentQC'}
 
 # file extensions for output files; the first extension in each list is used for newly created files
 # NOTE that after the db table is created, changes to this list be made manually in the db
-file_exts =[{'name':'mult_metrics_stdout', 'exts': [ '.multiple.metrics.stdout.txt'] },
-            {'name':'mult_metrics_stderr', 'exts': ['.multiple.metrics.stderr.txt']},
-            {'name':'aln_txt', 'exts': ['.alignment_summary_metrics.txt', '.AlignmentMetrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-            {'name':'aln_stdout', 'exts': ['.alignment_metrics.stdout.txt']}, # not used by CollectMultipleMetrics
-            {'name':'aln_stderr', 'exts': ['.alignment_metrics.stderr.txt', '.stderr.txt']}, # not used by CollectMultipleMetrics                                    
-            {'name':'qual_by_cycle_txt', 'exts': ['.quality_by_cycle_metrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-            {'name':'qual_by_cycle_pdf', 'exts': ['.quality_by_cycle.pdf']}, # fixed from CollectMultipleMetrics
-            {'name':'qual_by_cycle_png', 'exts': ['.quality_by_cycle.png']}, # convert pdf to png
-            {'name':'qual_by_cycle_stdout', 'exts': ['.qual_by_cycle.stdout.txt']}, # not used by CollectMultipleMetrics
-            {'name':'qual_by_cycle_stderr', 'exts': ['.qual_by_cycle.stderr.txt']}, # not used by CollectMultipleMetrics
-            {'name':'qual_dist_txt', 'exts': ['.quality_distribution_metrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-            {'name':'qual_dist_pdf', 'exts': ['.quality_distribution.pdf']}, # fixed from CollectMultipleMetrics
-            {'name':'qual_dist_png', 'exts': ['.quality_distribution.png']}, # convert pdf to png
-            {'name':'qual_dist_stdout', 'exts': ['.qual_distribution.stdout.txt']}, # not used by CollectMultipleMetrics
-            {'name':'qual_dist_stderr', 'exts': ['.qual_distribution.stderr.txt']}, # not used by CollectMultipleMetrics
-            {'name':'gc_bias_txt', 'exts': ['.gc_bias_metrics.txt']},
-            {'name':'gc_bias_pdf', 'exts': ['.gc_bias_metrics.pdf']},
-            {'name':'gc_bias_png', 'exts': ['.gc_bias_metrics.png']}, # convert pdf to png
-            {'name':'gc_bias_summary', 'exts': ['.gc_bias_metrics.summary_metrics.txt']},
-            {'name':'gc_bias_stdout', 'exts': ['.gc_bias_metrics.stdout.txt']},
-            {'name':'gc_bias_stderr', 'exts': ['.gc_bias_metrics.stderr.txt']},
-            {'name':'insert_size_txt', 'exts': ['.insert_size_metrics.txt']}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-            {'name':'insert_size_hist', 'exts': ['.insert_size_histogram.pdf']}, # fixed from CollectMultipleMetrics
-            {'name':'insert_size_png', 'exts': ['.insert_size_histogram.png']}, # convert pdf to png
-            {'name':'insert_size_stdout', 'exts': ['.insert_size_metrics.stdout.txt']}, # not used by CollectMultipleMetrics
-            {'name':'insert_size_stderr', 'exts': ['.insert_size_metrics.stderr.txt']}, # not used by CollectMultipleMetrics
-            {'name':'timing', 'exts': ['timing.txt']}
+file_ext =[{'name':'mult_metrics_stdout', 'extension': '.multiple.metrics.stdout.txt' },
+            {'name':'mult_metrics_stderr', 'extension':'.multiple.metrics.stderr.txt'},
+            {'name':'aln_txt', 'extension': '.alignment_summary_metrics.txt'}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'aln_stdout', 'extension': '.alignment_metrics.stdout.txt'}, # not used by CollectMultipleMetrics
+            {'name':'aln_stderr', 'extension': '.alignment_metrics.stderr.txt'}, # not used by CollectMultipleMetrics                                    
+            {'name':'qual_by_cycle_txt', 'extension': '.quality_by_cycle_metrics.txt'}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'qual_by_cycle_pdf', 'extension': '.quality_by_cycle.pdf'}, # fixed from CollectMultipleMetrics
+            {'name':'qual_by_cycle_png', 'extension': '.quality_by_cycle.png'}, # convert pdf to png
+            {'name':'qual_by_cycle_stdout', 'extension': '.qual_by_cycle.stdout.txt'}, # not used by CollectMultipleMetrics
+            {'name':'qual_by_cycle_stderr', 'extension': '.qual_by_cycle.stderr.txt'}, # not used by CollectMultipleMetrics
+            {'name':'qual_dist_txt', 'extension': '.quality_distribution_metrics.txt'}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'qual_dist_pdf', 'extension': '.quality_distribution.pdf'}, # fixed from CollectMultipleMetrics
+            {'name':'qual_dist_png', 'extension': '.quality_distribution.png'}, # convert pdf to png
+            {'name':'qual_dist_stdout', 'extension': '.qual_distribution.stdout.txt'}, # not used by CollectMultipleMetrics
+            {'name':'qual_dist_stderr', 'extension': '.qual_distribution.stderr.txt'}, # not used by CollectMultipleMetrics
+            {'name':'gc_bias_txt', 'extension': '.gc_bias_metrics.txt'},
+            {'name':'gc_bias_pdf', 'extension': '.gc_bias_metrics.pdf'},
+            {'name':'gc_bias_png', 'extension': '.gc_bias_metrics.png'}, # convert pdf to png
+            {'name':'gc_bias_summary', 'extension': '.gc_bias_metrics.summary_metrics.txt'},
+            {'name':'gc_bias_stdout', 'extension': '.gc_bias_metrics.stdout.txt'},
+            {'name':'gc_bias_stderr', 'extension': '.gc_bias_metrics.stderr.txt'},
+            {'name':'insert_size_txt', 'extension': '.insert_size_metrics.txt'}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
+            {'name':'insert_size_hist', 'extension': '.insert_size_histogram.pdf'}, # fixed from CollectMultipleMetrics
+            {'name':'insert_size_png', 'extension': '.insert_size_histogram.png'}, # convert pdf to png
+            {'name':'insert_size_stdout', 'extension': '.insert_size_metrics.stdout.txt'}, # not used by CollectMultipleMetrics
+            {'name':'insert_size_stderr', 'extension': '.insert_size_metrics.stderr.txt'}, # not used by CollectMultipleMetrics
+            {'name':'timing', 'extension': 'timing.txt'}
            ]        
 
 db.define_table('file_type',
     Field('name'),    
-    Field('exts', 'list:string')) # the first list entry is used for newly created files
+    Field('extension'))
 
 # populate output_file_type table if not done already
 file_type = db(db.file_type.id > 0).select().first()
 if not file_type:    
-    db.file_type.bulk_insert(file_exts)
+    db.file_type.bulk_insert(file_ext)
     db.commit()
 
 

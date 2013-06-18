@@ -254,7 +254,7 @@ class AppResult(object):
         """
         db = current.db
         type_row = db(db.file_type.name=='timing').select().first()
-        time_file = type_row.exts[0]
+        time_file = type_row.extension
         ssn_row = db(db.app_session.id==self.app_session_id).select().first()
         scratch_path = self.scratch_path(ssn_row.app_session_num)        
         time_path = os.path.join(scratch_path, time_file)        
@@ -334,7 +334,7 @@ class AppResult(object):
                     'qual_dist_txt', 'qual_dist_pdf', 'mult_metrics_stdout',
                     'mult_metrics_stderr' ]:
             type_row = db(db.file_type.name==ext).select().first()
-            outpaths[ext] = input_path + type_row.exts[0]                                                                                                                                
+            outpaths[ext] = input_path + type_row.extension                                                                                                                                
         
         # assemble picard command
         jar = os.path.join(current.picard_path, "CollectMultipleMetrics.jar")
@@ -353,7 +353,7 @@ class AppResult(object):
             command.append("PROGRAM=CollectInsertSizeMetrics")
             for ext in 'insert_size_txt', 'insert_size_hist':
                 type_row = db(db.file_type.name==ext).select().first()
-                outpaths[ext] = input_path + type_row.exts[0]            
+                outpaths[ext] = input_path + type_row.extension            
         
         # add optional genome if available
         gen_row = db(db.genome.id==input_file.genome_id).select().first()
@@ -374,13 +374,13 @@ class AppResult(object):
         paths = []
         for ext in 'aln_txt', 'qual_by_cycle_txt', 'qual_dist_txt':
                 type_row = db(db.file_type.name==ext).select().first()
-                paths.append(input_path + type_row.exts[0])        
+                paths.append(input_path + type_row.extension)        
         for path in paths:
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)
         if input_file.is_paired_end == 'paired':
             type_row = db(db.file_type.name=='insert_size_txt').select().first()
-            path = input_path + type_row.exts[0]
+            path = input_path + type_row.extension
             if (os.path.exists(path[:-4])):
                 os.rename(path[:-4], path)
        
@@ -392,9 +392,9 @@ class AppResult(object):
         
         for (pdf_ext, png_ext) in convert:
             type_row = db(db.file_type.name==pdf_ext).select().first()
-            pdf_path = input_path + type_row.exts[0]
+            pdf_path = input_path + type_row.extension
             type_row = db(db.file_type.name==png_ext).select().first()
-            png_path = input_path + type_row.exts[0]
+            png_path = input_path + type_row.extension
             #cur_outpaths = [ png_path, ]        
             if os.path.exists(pdf_path):
                 command = [ 'convert', '-flatten', pdf_path, png_path ]             
@@ -427,7 +427,7 @@ class AppResult(object):
         for ext in ['gc_bias_txt', 'gc_bias_pdf', 'gc_bias_summary',
                     'gc_bias_stdout', 'gc_bias_stderr' ]:
             type_row = db(db.file_type.name==ext).select().first()
-            outpaths[ext] = input_path + type_row.exts[0]
+            outpaths[ext] = input_path + type_row.extension
 
         # assemble picard command and run it
         jar = os.path.join(current.picard_path, "CollectGcBiasMetrics.jar")
@@ -465,9 +465,9 @@ class AppResult(object):
         convert = [['gc_bias_pdf', 'gc_bias_png'],]        
         for (pdf_ext, png_ext) in convert:
             type_row = db(db.file_type.name==pdf_ext).select().first()   
-            pdf_path = input_path + type_row.exts[0]            
+            pdf_path = input_path + type_row.extension            
             type_row = db(db.file_type.name==png_ext).select().first()
-            png_path = input_path + type_row.exts[0]            
+            png_path = input_path + type_row.extension            
             #cur_outpaths = [ png_path, ]        
             if os.path.exists(pdf_path):
                 command = [ 'convert', '-flatten', pdf_path, png_path ]             
