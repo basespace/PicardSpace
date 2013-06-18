@@ -385,7 +385,7 @@ def confirm_analysis_inputs():
     """
     ret = dict(sample_name="", file_name="", project_name="", writeback_msg="",
                ar_num="", file_num="", file_back="", price="", confirm_msg="", 
-               is_paired_end="", err_msg="") 
+               is_paired_end="", free_trial=False, err_msg="") 
     
     # get file_num and app_result_num that user selected    
     if ('file_num' not in request.vars or
@@ -420,13 +420,15 @@ def confirm_analysis_inputs():
         ret['err_msg'] = "Error creating product purchase: " + str(e) 
         return ret
     try:
-        prod_purch.calc_quantity(ret['file_num'], user_row.access_token)
+        prod_purch.calc_quantity(ret['file_num'], auth.user_id, False)        
     except Exception as e:
         ret['err_msg'] = "Error calculating product price: " + str(e) 
         return ret                   
     ret['price'] = int(prod_purch.prod_quantity) * int(prod_purch.prod_price)
     
     if ret['price'] == 0:
+        if prod_purch.free_trial:
+            ret['free_trial'] = True
         ret['confirm_msg'] = "Make It So"
     else:
         ret['confirm_msg'] = "Checkout..."
@@ -523,7 +525,7 @@ def start_billing():
     except:
         return dict(err_msg="Error creating product purchase: " + str(e))
     try:
-        prod_purch.calc_quantity(file_num, user_row.access_token)
+        prod_purch.calc_quantity(file_num, auth.user_id, True)        
     except Exception as e:
         return dict(err_msg="Error calculating product price: " + str(e))        
     
@@ -555,7 +557,10 @@ def start_billing():
         amount = 0
         amount_of_tax = 0    
         amount_total = 0
-        status="free"
+        if prod_purch.free_trial:
+            status = "free trial"
+        else:
+            status="free"
         redirect_url = URL('create_writeback_project', vars=dict(ar_name=ar_name, ar_num=ar_num, file_num=file_num))
         
     # record purchase in db

@@ -594,23 +594,39 @@ class ProductPurchase(object):
         self.file_num = None
         self.amount = None
         self.prod_quantity = None
+        self.free_trial = False
 
-    def calc_quantity(self, file_num, access_token):
+
+    def calc_quantity(self, file_num, user_id, live_purchase):
         """
         Calculates quantity of product needed to purchase from analyzing the provided file
+        If live_purchase is True, free trials are decremented from the db
         """
-        self.file_num=file_num
+        db=current.db                 
+        self.file_num = file_num
+        self.free_trial = False
         if(self.prod_name == current.product_names['AlignmentQC']):
-            db=current.db     
-                
+            user_row = db(db.auth_user.id==user_id).select().first()            
             app = db(db.app_data.id > 0).select().first()                                    
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, "", access_token)                
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, "", user_row.access_token)                
             input_file = bs_api.getFileById(file_num)    
         
-            if input_file.Size < 100000000: # <100 MB
+            # BAM files less than 100 MB are free
+            if input_file.Size < 100000000:
                 self.prod_quantity = 0
             else:
-                self.prod_quantity = 1                                   
+                # determine if free trial                
+                trial_row = db((db.free_trial.user_id==user_row.id) &
+                      (db.free_trial.product_id==self.prod_id) &
+                      (db.free_trial.trials > 0)).select().first()
+                if trial_row:
+                    # decrement trials in db
+                    if live_purchase:
+                        trial_row.update_record(trials=int(trial_row.trials) - 1)
+                    self.prod_quantity = 0
+                    self.free_trial = True
+                else:                                
+                    self.prod_quantity = 1                                                    
         else:
             raise UnrecognizedProductException(self.prod_name)
         

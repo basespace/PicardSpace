@@ -94,36 +94,7 @@ auth.settings.expiration = 3600  # seconds
 
 # define global vars
 current.debug_ps = False
-current.product_names = {'AlignmentQC':'AlignmentQC'}
-#current.file_ext = {'mult_metrics_stdout': '.multiple.metrics.stdout.txt',
-#                    'mult_metrics_stderr': '.multiple.metrics.stderr.txt',
-#                    'aln_txt': '.alignment_summary_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-#                    'aln_stdout': '.alignment_metrics.stdout.txt', # not used by CollectMultipleMetrics
-#                    'aln_stderr': '.alignment_metrics.stderr.txt', # not used by CollectMultipleMetrics
-#                    'old_aln_txt': '.AlignmentMetrics.txt', # for back compat with existing AppResults
-#                    'old_aln_stderr': '.stderr.txt', # for back compat with existing AppResults                
-#                    'qual_by_cycle_txt': '.quality_by_cycle_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-#                    'qual_by_cycle_pdf': '.quality_by_cycle.pdf', # fixed from CollectMultipleMetrics
-#                    'qual_by_cycle_png': '.quality_by_cycle.png', # convert pdf to png
-#                    'qual_by_cycle_stdout': '.qual_by_cycle.stdout.txt', # not used by CollectMultipleMetrics
-#                    'qual_by_cycle_stderr': '.qual_by_cycle.stderr.txt', # not used by CollectMultipleMetrics
-#                    'qual_dist_txt': '.quality_distribution_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-#                    'qual_dist_pdf': '.quality_distribution.pdf', # fixed from CollectMultipleMetrics
-#                    'qual_dist_png': '.quality_distribution.png', # convert pdf to png
-#                    'qual_dist_stdout': '.qual_distribution.stdout.txt', # not used by CollectMultipleMetrics
-#                    'qual_dist_stderr': '.qual_distribution.stderr.txt', # not used by CollectMultipleMetrics
-#                    'gc_bias_txt': '.gc_bias_metrics.txt',
-#                    'gc_bias_pdf': '.gc_bias_metrics.pdf',
-#                    'gc_bias_png': '.gc_bias_metrics.png', # convert pdf to png
-#                    'gc_bias_summary': '.gc_bias_metrics.summary_metrics.txt',
-#                    'gc_bias_stdout': '.gc_bias_metrics.stdout.txt',
-#                    'gc_bias_stderr': '.gc_bias_metrics.stderr.txt',
-#                    'insert_size_txt': '.insert_size_metrics.txt', # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
-#                    'insert_size_hist': '.insert_size_histogram.pdf', # fixed from CollectMultipleMetrics
-#                    'insert_size_png': '.insert_size_histogram.png', # convert pdf to png
-#                    'insert_size_stdout': '.insert_size_metrics.stdout.txt', # not used by CollectMultipleMetrics
-#                    'insert_size_stderr': '.insert_size_metrics.stderr.txt', # not used by CollectMultipleMetrics
-#                    }        
+current.product_names = {'AlignmentQC':'AlignmentQC'}      
 
 # file extensions for output files; the first extension in each list is used for newly created files
 # NOTE that after the db table is created, changes to this list be made manually in the db
@@ -414,4 +385,16 @@ db.define_table('purchased_product',    # product(s) that were bought in a user 
     Field('quantity'),
     Field('prod_price'),                # price of product for this purchase (product price can change over time)
     Field('tags', 'list:string'))
+
+db.define_table('free_trial',
+    Field('user_id'), db.auth_user,
+    Field('product_id', db.product),   
+    Field('trials'))
+
+# add free trials for new users
+def add_free_trial(user_id, product_name):
+    p_row = db(db.product.name==product_name).select().first()
+    if p_row:            
+        db.free_trial.insert(user_id=user_id, product_id=p_row.id, trials=1)
+db.auth_user._after_insert.append(lambda f,new_id: add_free_trial(new_id, 'AlignmentQC'))
     

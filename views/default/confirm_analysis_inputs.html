@@ -49,7 +49,11 @@
 	    	</tr>
 	    	<tr>
 	    		<th>Price before tax:</th>
-	    		<td>{{=price}} {{ if price == 1: }}iCredit{{ else: }}iCredits{{pass}}</td>
+	    		{{if free_trial:}}
+	    		    <td class="text-info"><strong><em>FREE trial</em></strong></td>
+                {{else:}}	    		    
+	    		    <td>{{=price}} {{ if price == 1: }}iCredit{{ else: }}iCredits{{pass}}</td>
+	    		{{pass}}
 	    	</tr>
 	    </table>
 	    
