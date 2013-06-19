@@ -161,7 +161,7 @@ def handle_redirect_uri():
             redirect(session.return_url)                  
 
     # shouldn't reach this point - redirect to index page
-    return dict(err_msg="Error - didn't recognized parameters after return from BaseSpace redirect")
+    return dict(err_msg="Error - didn't recognize parameters after return from BaseSpace redirect")
                                             
 
 def index():
@@ -385,6 +385,7 @@ def confirm_analysis_inputs():
     """
     ret = dict(sample_name="", file_name="", project_name="", writeback_msg="",
                ar_num="", file_num="", file_back="", price="", confirm_msg="", 
+               genome_name="", known_genome=False, genome_msg="", 
                is_paired_end="", free_trial=False, err_msg="") 
     
     # get file_num and app_result_num that user selected    
@@ -467,6 +468,7 @@ def confirm_analysis_inputs():
             gen_row = db(db.genome.genome_num==genome_num).select().first()                    
             if gen_row:
                 ret['genome_name'] = gen_row.display_name
+                ret['known_genome'] = True
             else:
                 try:
                     genome = bs_api.getGenomeById(genome_num)
@@ -489,7 +491,9 @@ def confirm_analysis_inputs():
 
     # add writeback message if writing to PicardSpace Results project    
     if ret['project_name'] == 'PicardSpace Results':
-        ret['writeback_msg'] = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."    
+        ret['writeback_msg'] = "Since you are not the owner of the Project that contains the BAM file you selected, you can not save files in that Project. Instead, your output files will be saved in a BaseSpace Project that you own named 'PicardSpace Results'."
+    if ret['known_genome'] == False:
+        ret['genome_msg'] = "GC-Bias metrics are only calculated for samples with known genomes."    
     return ret        
 
 

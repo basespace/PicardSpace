@@ -27,7 +27,11 @@
 	    	</tr>
 	    	<tr>
 	    		<th>Genome:</th>
-	    		<td>{{=genome_name}}</td>
+	    		<td>{{=genome_name}}
+	    		{{ if not known_genome: }}
+	    		  <small><a href="#" data-toggle="collapse" data-target="#genome"> <i class="icon-question-sign"></i> details</a></small>
+	    		{{pass}}</td>
+	    		
 	    	</tr>
 	    	<tr>
 	    		<th>Paired-end:</th>
@@ -38,7 +42,7 @@
 	    		<td>
 	    		{{=project_name}} 
 			      {{ if writeback_msg != "": }}
-			        <small><a href="#" data-toggle="collapse" data-target="#writeback">(see details)</a></small>
+			        <small><a href="#" data-toggle="collapse" data-target="#writeback"> <i class="icon-question-sign"></i> details</a></small>
 			      {{pass}}</td>
 	    	</tr>
 	    	<tr>
@@ -68,6 +72,7 @@
   </form>
 
   <div id="writeback" class="collapse text-info">{{=writeback_msg}}</div>   
+  <div id="genome" class="collapse text-info">{{=genome_msg}}</div>   
 
 
 </div> 
