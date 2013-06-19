@@ -55,6 +55,8 @@
 	    		<th>Price before tax:</th>
 	    		{{if free_trial:}}
 	    		    <td class="text-info"><strong><em>FREE trial</em></strong></td>
+                {{elif price == 0:}}
+                    <td class="text-info"><strong><em>FREE</em></strong></td>
                 {{else:}}	    		    
 	    		    <td>{{=price}} {{ if price == 1: }}iCredit{{ else: }}iCredits{{pass}}</td>
 	    		{{pass}}

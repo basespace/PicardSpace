@@ -766,7 +766,7 @@ def start_analysis():
     db.commit()
 
     # update AppSession status
-    app_ssn_row.update_record(status="queued for download", message="input file added to download queue")
+    app_ssn_row.update_record(status='queued for download', message='')
     db.commit()   
 
     # add BAM File to download queue

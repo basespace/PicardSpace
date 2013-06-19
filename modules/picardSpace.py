@@ -119,7 +119,7 @@ class AnalysisInputFile(File):
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
         
         # update app session status
-        ssn_row.update_record(status="downloading")
+        ssn_row.update_record(status='downloading', message='')
         db.commit()
         time_start_download = datetime.now()        
         
@@ -128,24 +128,13 @@ class AnalysisInputFile(File):
         self.download_file(file_num=self.file_num, local_dir=local_dir, app_session_id=ssn_row.id)
         
         # update file's local path
-        file_row = db(db.input_file.id==self.bs_file_id).select().first()     
-        #file_row.update_record(local_path=local_file)
+        file_row = db(db.input_file.id==self.bs_file_id).select().first()             
         file_row.update_record(local_path=self.local_path)
         db.commit()               
-    
-        # update app_session status to 'download complete, in analysis queue'
-        ssn_row.update_record(status="queued for analysis", message="download complete")
-        db.commit()
+        
+        # record download timing    
         time_end_download = datetime.now()
-        time_download = time_end_download - time_start_download 
-
-        # add file to analysis queue
-        #if (current.debug_ps):
-        #analyze_bs_file(input_file_id=self.bs_file_id, time_download=time_download)                              
-        #else:
-        #    current.scheduler.queue_task(analyze_bs_file, 
-        #                                 pvars = {'input_file_id':self.bs_file_id, 'time_download':time_download}, 
-        #                                 timeout = 86400) # seconds
+        time_download = time_end_download - time_start_download         
 
         # create AppResult object to analyze downloaded File
         app_result = AppResult(
@@ -197,33 +186,31 @@ class AppResult(object):
         """
         db = current.db                                    
         # update db and BaseSpace App Session with status
-        self.update_status('running', 'picard is running', 'running')
+        self.update_status('running', 'analysis starting', 'running')
         time_start_als = datetime.now()
                 
         # run picard                        
         if self._run_picard(input_file):
-            message = 'analysis successful; results not yet written back to BaseSpace'
+            message = ''
             analysis_success = True            
         else:
-            message = 'analysis failed - see stderr.txt; results not yet written back to BaseSpace'
+            message = 'analysis failed'
             analysis_success = False        
-        self.update_status("writing back", message)       
-        time_start_wb = datetime.now()
-       
-        # write-back output files            
+                           
+        # write-back output files
+        self.update_status('uploading results', message)       
+        time_start_wb = datetime.now()            
         self._writeback_app_result_files()
-        message = "analysis and write-back successful"
+        message = ''
         if not analysis_success:        
-            message = "analysis failed - see stderr.txt; writeback successful"        
+            message = 'analysis failed; see Log for troubleshooting'        
         self.update_status('deleting local files', message)    
-                
+        
         # delete local input and output files
         os.remove(input_file.local_path)
         while(len(self.output_files)):
             f = self.output_files.pop()        
-            os.remove(f.local_path)         
-                
-        message += "; deleted local files"
+            os.remove(f.local_path)                                 
         time_end_wb = datetime.now()
 
         # create timing file, write-back to BaseSpace
@@ -243,6 +230,7 @@ class AppResult(object):
 
         # update session status
         status = 'complete'
+        message = ''
         if not analysis_success:                    
             status = 'aborted'        
         self.update_status(status, message, status)
@@ -362,7 +350,7 @@ class AppResult(object):
             fasta_path = os.path.join(genome_path, "Sequence", "WholeGenomeFasta", "genome.fa")
             command.append("REFERENCE_SEQUENCE=" + fasta_path)                                            
         
-        self.update_status('running', 'Collecting multiple metrics')
+        self.update_status('running', 'collecting multiple picard metrics')
         
         # run command, write stdout, stderr to files
         with open(outpaths['mult_metrics_stdout'], "w") as FO:
@@ -450,7 +438,7 @@ class AppResult(object):
             return True   
         
         # run command, write stdout, stderr to files
-        self.update_status('running', 'Collecting gc-bias metrics')
+        self.update_status('running', 'collecting gc-bias metrics')
         with open(outpaths['gc_bias_stdout'], "w") as FO:            
             with open(outpaths['gc_bias_stderr'], "w") as FE:                                        
                 rcode = call(command, stdout=FO, stderr=FE)   
@@ -698,7 +686,7 @@ def analyze_bs_file(input_file_id):
         user_row = db(db.auth_user.id==ssn_row.user_id).select().first()            
         bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
         app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
-        message = "Error analyzing file from BaseSpace: {0}".format(str(e))            
+        message = "error analyzing file from BaseSpace: {0}".format(str(e))            
         app_ssn.setStatus(bs_api, 'aborted', message[:128])                    
         print message # user won't see this
         
