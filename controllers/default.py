@@ -869,9 +869,13 @@ def view_results():
         ret['next_offset'] = ret['ar_tot']    
     if ret['prev_offset'] < 0:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
         ret['prev_offset'] = 0
-    
-    ret['ar_start'] = ret['ar_offset'] + 1            
-    return ret
+
+    # handle zero app results
+    if ret['ar_tot'] == 0:
+        ret['ar_start'] = 0
+    else:
+        ret['ar_start'] = ret['ar_offset'] + 1
+    return ret  
 
     
 @auth.requires_login()
