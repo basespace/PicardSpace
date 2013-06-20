@@ -97,7 +97,7 @@ current.debug_ps = False
 current.product_names = {'AlignmentQC':'AlignmentQC'}      
 
 # file extensions for output files; the first extension in each list is used for newly created files
-# NOTE that after the db table is created, changes to this list be made manually in the db
+# NOTE that after the db table is created, changes to this list must be made manually in the db
 file_ext =[{'name':'mult_metrics_stdout', 'extension': '.multiple.metrics.stdout.txt' },
             {'name':'mult_metrics_stderr', 'extension':'.multiple.metrics.stderr.txt'},
             {'name':'aln_txt', 'extension': '.alignment_summary_metrics.txt'}, # fixed from CollectMultipleMetrics, '.txt' added by PicardSpace
@@ -137,23 +137,47 @@ if not file_type:
     db.file_type.bulk_insert(file_ext)
     db.commit()
 
-
-
-# genomes keyed by BaseSpace genome id
-#current.genomes = {                   
-#   '3': 'Escherichia_coli_K_12_DH10B/NCBI/2008-03-17',
-#   '4': 'Homo_sapiens/UCSC/hg19',
-#   '5': 'Mus_musculus/UCSC/mm9',
-#   '6': 'PhiX/Illumina/RTA',
-#   '7': 'Rhodobacter_sphaeroides_2.4.1/NCBI/2005-10-07',                   
-#   '12': 'Bacillus_cereus_ATCC_10987/NCBI/2004-02-13' }
-#current.unsupported_genomes = {
+# default genomes -- note must install these locally at initial install
+# NOTE that after the db table is created, changes to this list must be made manually in the db
+genomes = [{'display_name':'Homo sapiens (UCSC, hg19)', 
+            'genome_num':'4', 
+            'local_path': 'Homo_sapiens/UCSC/hg19'},
+           {'display_name':'Escherichia coli K12 strain DH10B (NCBI, 2008-03-17)', 
+            'genome_num':'3', 
+            'local_path': 'Escherichia_coli_K_12_DH10B/NCBI/2008-03-17'},
+           {'display_name':'Mus musculus (UCSC, mm9)', 
+            'genome_num':'5', 'local_path': 
+            'Mus_musculus/UCSC/mm9'},
+           {'display_name':'PhiX (Illumina, RTA)', 
+            'genome_num':'6', 
+            'local_path': 'PhiX/Illumina/RTA'},
+           {'display_name':'Rhodobacter sphaeroides 2.4.1 (NCBI, 2005-10-07)', 
+            'genome_num':'7', 
+            'local_path': 'Rhodobacter_sphaeroides_2.4.1/NCBI/2005-10-07'},
+           {'display_name':'Bacillus cereus strain ATCC 10987 (NCBI, 2004-02-13)', 
+            'genome_num':'12', 
+            'local_path': 'Bacillus_cereus_ATCC_10987/NCBI/2004-02-13'},
+           ]
+# Currently unsupported genomes
 #   '1': 'Arabidopsis thaliana',
 #   '2': 'Bos taurus',                                      
 #   '8': 'Rattus norvegicus',
 #   '9': 'Saccharomyces cerevisiae',
 #   '10': 'Staphylococcus aureus',
 #   '11': 'N.A.' }
+
+db.define_table('genome',
+    Field('display_name'),
+    Field('genome_num'),
+    Field('local_path'))
+db.commit()
+
+# populate genome table if empty
+genome_row = db(db.genome.id > 0).select().first()
+if not genome_row:    
+    db.genome.bulk_insert(genomes)
+    db.commit()
+
 
 # define app data - 
 # NOTE - on initial install, must configure client_id, client_secret, and redirect_uri (and product(s) in product table)
@@ -321,11 +345,6 @@ db.define_table('app_session',
     Field('date_created'),
     Field('status'),                    
     Field('message'))                   # detail about AppSession status
-
-db.define_table('genome',
-    Field('display_name'),
-    Field('genome_num'),
-    Field('local_path'))
 
 db.define_table('input_app_result',     # newly created AppResult for PicardSpace's output files
 #    Field('app_session_id', db.app_session),
