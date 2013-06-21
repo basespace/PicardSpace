@@ -893,7 +893,7 @@ def view_alignment_metrics():
                qual_dist_png="", qual_dist_url="",
                gc_bias_png="", gc_bias_url="",
                insert_size_png="", insert_size_url="",
-               err_msg="")
+               genome="", err_msg="")
     app_session_id = request.get_vars.app_session_id    
     ret['aln_tbl'] = [["data not available"]]
         
@@ -909,8 +909,8 @@ def view_alignment_metrics():
     output_ar_row = db(db.output_app_result.app_session_id==app_session_id).select().first()        
     input_file_row = db(db.input_file.id==output_ar_row.input_file_id).select().first()
     input_ar_row = db(db.input_app_result.id==input_file_row.app_result_id).select().first()
-    app = db(db.app_data.id > 0).select().first()
-        
+    app = db(db.app_data.id > 0).select().first()    
+    genome_row = db(db.genome.id==input_file_row.genome_id).select().first()    
                 
     # get Sample and Project from BaseSpace
     try:
@@ -932,8 +932,12 @@ def view_alignment_metrics():
     ret['output_project_name'] = output_project.Name
 
     ret['input_project_href'] = input_project.HrefBaseSpaceUI
-    ret['output_project_href'] = output_project.HrefBaseSpaceUI
-            
+    ret['output_project_href'] = output_project.HrefBaseSpaceUI    
+    if genome_row:
+        ret['genome'] = genome_row.display_name
+    else:
+        ret['genome'] = 'unknown'        
+    
     # get BaseSpace links to output files
     app_result = AppResult.init_from_db(output_ar_row)
     
