@@ -3,6 +3,7 @@ import os.path
 import re
 import shutil
 from datetime import datetime
+import boto.ec2
 from gluon import HTTP
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
@@ -772,6 +773,25 @@ def start_analysis():
     # add BAM File to download queue
     if (current.debug_ps):
         analyze_bs_file(input_file_id)
+    elif (current.AWS_on_demand):
+        conn = boto.ec2.connect_to_region(current.aws_region_name, 
+            aws_access_key_id=current.aws_access_key_id,
+            aws_secret_access_key=current.aws_secret_access_key)
+        user_data_script = ["#!/bin/sh",
+            "set -x # echo commands to /var/log/syslog",
+            #"set -e # exit when first cmd fails in script”,
+            "mkdir /mnt/downloads",
+            "chown www-data:www-pub /mnt/downloads",
+            "python web2py.py -S PicardSpace -M -N -R applications/PicardSpace/private/run_analysis.py -A " + str(input_file_id),
+            "shutdown -h now"]
+        reservation = conn.run_instances(current.aws_analysis_image_id, 
+            key_name=current.aws_analysis_key_name, 
+            instance_type=current.aws_analysis_instance_type, 
+            security_groups=[current.aws_analysis_security_group], 
+            placement=current.aws_analysis_availability_zone, 
+            user_data='\n'.join(user_data_script), 
+            instance_initiated_shutdown_behavior='terminate')
+        # TODO handle error in reservation        
     else:
         scheduler.queue_task(analyze_bs_file, 
                              pvars = {'input_file_id':input_file_id}, 
