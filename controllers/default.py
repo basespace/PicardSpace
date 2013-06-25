@@ -782,7 +782,7 @@ def start_analysis():
             #"set -e # exit when first cmd fails in script”,
             "mkdir /mnt/downloads",
             "chown www-data:www-pub /mnt/downloads",
-            "python web2py.py -S PicardSpace -M -N -R applications/PicardSpace/private/run_analysis.py -A " + str(input_file_id),
+            "python web2py.py -S PicardSpace -M -R applications/PicardSpace/private/run_analysis.py -A " + str(input_file_id),
             "shutdown -h now"]
         reservation = conn.run_instances(current.aws_analysis_image_id, 
             key_name=current.aws_analysis_key_name, 
