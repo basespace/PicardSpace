@@ -364,7 +364,7 @@ db.define_table('app_session',
     Field('status'),                    
     Field('message'))                   # detail about AppSession status
 
-db.define_table('input_app_result',     # newly created AppResult for PicardSpace's output files
+db.define_table('input_app_result',     # AppResult that contains the input BAM file
 #    Field('app_session_id', db.app_session),
     Field('app_result_num'),
     Field('app_result_name'),

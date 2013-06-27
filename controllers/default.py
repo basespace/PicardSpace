@@ -778,12 +778,10 @@ def start_analysis():
             aws_access_key_id=current.aws_access_key_id,
             aws_secret_access_key=current.aws_secret_access_key)
         user_data_script = ["#!/bin/sh",
-            "set -x # echo commands to /var/log/syslog",
-            #"set -e # exit when first cmd fails in script”,
-            "mkdir /mnt/downloads",
-            "chown www-data:www-pub /mnt/downloads",
-            "python web2py.py -S PicardSpace -M -R applications/PicardSpace/private/run_analysis.py -A " + str(input_file_id),
-            "shutdown -h now"]
+            "exec > /home/www-data/web2py/applications/PicardSpace/private/user_data.log 2>&1",
+            "set -x # turn on debug trace mode",
+            "bash /home/www-data/web2py/applications/PicardSpace/private/init_instance.bash " + str(input_file_id),            
+            "shutdown -h now"]            
         reservation = conn.run_instances(current.aws_analysis_image_id, 
             key_name=current.aws_analysis_key_name, 
             instance_type=current.aws_analysis_instance_type, 
