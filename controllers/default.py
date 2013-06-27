@@ -765,15 +765,15 @@ def start_analysis():
         sample_num=sample_num,        
         input_file_id=input_file_id)             
     db.commit()
-
-    # update AppSession status
-    app_ssn_row.update_record(status='queued for download', message='')
-    db.commit()   
-
-    # add BAM File to download queue
+    
+    # begin download and analysis, update session status 
     if (current.debug_ps):
+        app_ssn_row.update_record(status='starting download', message='')
+        db.commit()   
         analyze_bs_file(input_file_id)
     elif (current.AWS_on_demand):
+        app_ssn_row.update_record(status='analysis instance launching', message='Your analysis will begin within the next few minutes')
+        db.commit()
         conn = boto.ec2.connect_to_region(current.aws_region_name, 
             aws_access_key_id=current.aws_access_key_id,
             aws_secret_access_key=current.aws_secret_access_key)
@@ -791,6 +791,8 @@ def start_analysis():
             instance_initiated_shutdown_behavior='terminate')
         # TODO handle error in reservation        
     else:
+        app_ssn_row.update_record(status='analysis queued', message='')
+        db.commit()
         scheduler.queue_task(analyze_bs_file, 
                              pvars = {'input_file_id':input_file_id}, 
                              timeout = 86400, # seconds

@@ -111,7 +111,7 @@ auth.settings.expiration = 3600  # seconds
 
 # define global vars
 current.debug_ps = False
-current.AWS_on_demand = True
+current.AWS_on_demand = False
 current.product_names = {'AlignmentQC':'AlignmentQC'}      
 
 # file extensions for output files; the first extension in each list is used for newly created files
