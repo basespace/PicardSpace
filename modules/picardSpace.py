@@ -692,7 +692,7 @@ def analyze_bs_file(input_file_id):
         
         # perform refund if user paid for analysis
         pr_row = db(db.purchase.app_session_id==ssn_row.id).select().first()
-        if int(pr_row.amount_total) > 0:
+        if float(pr_row.amount_total) > 0:
             store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)           
             if pr_row.refund_status == 'NOTREFUNDED':
                 comment = 'Automatic refund was triggered by a PicardSpace error'
