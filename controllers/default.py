@@ -774,9 +774,7 @@ def start_analysis():
     elif (current.AWS_on_demand):
         app_ssn_row.update_record(status='analysis instance launching', message='Your analysis will begin within the next few minutes')
         db.commit()
-        conn = boto.ec2.connect_to_region(current.aws_region_name, 
-            aws_access_key_id=current.aws_access_key_id,
-            aws_secret_access_key=current.aws_secret_access_key)
+        conn = boto.ec2.connect_to_region(current.aws_region_name)            
         user_data_script = ["#!/bin/sh",
             "exec > /home/www-data/web2py/applications/PicardSpace/private/user_data.log 2>&1",
             "set -x # turn on debug trace mode",

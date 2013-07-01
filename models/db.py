@@ -34,8 +34,6 @@ if os.path.isfile(settings_path):
     current.scratch_path = config.get('PicardSpaceSettings', 'scratch_path')
     current.picard_path = config.get('PicardSpaceSettings', 'picard_path')
     current.aws_region_name = config.get('PicardSpaceSettings', 'aws_region_name')
-    current.aws_access_key_id = config.get('PicardSpaceSettings', 'aws_access_key_id')
-    current.aws_secret_access_key = config.get('PicardSpaceSettings', 'aws_secret_access_key')
     current.aws_analysis_image_id = config.get('PicardSpaceSettings', 'aws_analysis_image_id')
     current.aws_analysis_key_name = config.get('PicardSpaceSettings', 'aws_analysis_key_name')
     current.aws_analysis_instance_type = config.get('PicardSpaceSettings', 'aws_analysis_instance_type')
@@ -47,8 +45,6 @@ else:
     current.scratch_path = os.path.join(request.folder, 'private', 'downloads')
     current.picard_path = os.path.join(request.folder, 'private', 'picard-tools-1.92')
     current.aws_region_name = 'unknown'
-    current.aws_access_key_id = 'unkown'
-    current.aws_secret_access_key = 'unknown'
     current.aws_analysis_image_id = 'unknown'
     current.aws_analysis_key_name = 'unknown'
     current.aws_analysis_instance_type = 'unknown'    
