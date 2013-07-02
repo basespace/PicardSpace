@@ -299,10 +299,10 @@ def choose_analysis_app_result():
             ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
             return ret
         # build string of Sample names for display            
-        samples_names = []
+        samples_ids = []
         for s in samples:
-            samples_names.append(s.Name)          
-        ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_names),    # + ", " + str(ar.DateCreated),
+            samples_ids.append(s.SampleId)          
+        ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_ids),    # + ", " + str(ar.DateCreated),
                           "app_result_num" : ar.Id } )                                                  
     ret['ar_info'] = ar_info
     
@@ -358,10 +358,10 @@ def choose_analysis_file():
     # get Sample name from relationship to AppResult for display
     samples = app_result.getReferencedSamples(bs_api)
 
-    # build string of Sample names for display            
-    samples_names = []
+    # build string of Sample ids for display            
+    samples_ids = []
     for s in samples:
-        samples_names.append(s.Name)                
+        samples_ids.append(s.SampleId)                
                 
     # construct display name for each BAM file   
     file_info = []    
@@ -374,7 +374,7 @@ def choose_analysis_file():
                             "file_num" : f.Id,
                             "large_file" : large_file } )                      
     ret['file_info'] = file_info
-    ret['app_result_name'] = app_result.Name + " - " + ', '.join(samples_names)    
+    ret['app_result_name'] = app_result.Name + " - " + ', '.join(samples_ids)    
     return ret
 
 
@@ -385,7 +385,7 @@ def confirm_analysis_inputs():
     Offers user form to name analysis (app result name currently).
     Checks that user owns Project that contains input file; if not, uses 'PicardSpace Result' Project, which will be created if it doesn't already exist.
     """
-    ret = dict(sample_name="", file_name="", project_name="", writeback_msg="",
+    ret = dict(sample_sampleid="", file_name="", project_name="", writeback_msg="",
                ar_num="", file_num="", file_back="", price="", confirm_msg="", 
                genome_name="", known_genome=False, genome_msg="", 
                is_paired_end="", free_trial=False, err_msg="") 
@@ -437,7 +437,6 @@ def confirm_analysis_inputs():
         ret['confirm_msg'] = "Checkout..."
     
     # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
-    sample_name = "unknown"
     if samples_ids:
         sample_num = samples_ids[0]
         try:
@@ -445,7 +444,7 @@ def confirm_analysis_inputs():
         except Exception as e:
             ret['err_msg'] = "Error retrieving sample from BaseSpace: " + str(e)   
             return ret                     
-        ret['sample_name'] = sample.Name
+        ret['sample_sampleid'] = sample.SampleId
 
     # get paired-end status of sample
     try:
@@ -767,6 +766,7 @@ def start_analysis():
         input_file_id=input_file_id)             
     db.commit()
     output_ar_row = db(db.output_app_result.id==output_app_result_id).select().first()
+    output_ar = AppResult.init_from_db(output_ar_row)
     
     # begin download and analysis, update session status 
     if (current.debug_ps):
@@ -776,38 +776,39 @@ def start_analysis():
     elif (current.AWS_on_demand):
         app_ssn_row.update_record(status='analysis instance launching', message='Your analysis will begin within the next few minutes')
         db.commit()
+        
+        # ensure AWS info is in db
+        aws = db(db.aws_data.id > 0).select().first()
+        if not aws.region_name:
+            output_ar.abort_and_refund("AWS connection data not available")
         try:
-            conn = boto.ec2.connect_to_region(current.aws_region_name)
-        except Exception as e:                        
-            app_result = AppResult.init_from_db(output_ar_row)
-            app_result.abort_and_refund("error connection to AWS region")            
+            conn = boto.ec2.connect_to_region(aws.region_name)
+        except Exception as e:                                
+            output_ar.abort_and_refund("error connection to AWS region")            
         user_data_script = ["#!/bin/sh",
             "exec > /home/www-data/web2py/applications/PicardSpace/private/user_data.log 2>&1",
             "set -x # turn on debug trace mode",
             "bash /home/www-data/web2py/applications/PicardSpace/private/init_instance.bash " + str(input_file_id),            
             "shutdown -h now"]            
         try:
-            reservation = conn.run_instances(current.aws_analysis_image_id, 
-                key_name=current.aws_analysis_key_name, 
-                instance_type=current.aws_analysis_instance_type, 
-                security_groups=[current.aws_analysis_security_group], 
-                placement=current.aws_analysis_availability_zone, 
-                user_data='\n'.join(user_data_script), 
+            conn.run_instances(aws.analysis_image_id, 
+                key_name = aws.analysis_key_name, 
+                instance_type = aws.analysis_instance_type, 
+                security_groups = [aws.analysis_security_group], 
+                placement = aws.analysis_availability_zone, 
+                user_data = '\n'.join(user_data_script), 
                 instance_initiated_shutdown_behavior='terminate')
         except EC2ResponseError as e:            
-            app_result = AppResult.init_from_db(output_ar_row)
-            app_result.abort_and_refund("error launching analysis instance: {0}".format(str(e.reason)))        
-        except Exception as e:
-            app_result = AppResult.init_from_db(output_ar_row)
-            app_result.abort_and_refund("error launching analysis instance")            
+            output_ar.abort_and_refund("error launching analysis instance: {0}".format(str(e.reason)))        
+        except Exception as e:            
+            output_ar.abort_and_refund("error launching analysis instance")            
     else:
         app_ssn_row.update_record(status='analysis queued', message='')
         db.commit()
         scheduler.queue_task(analyze_bs_file, 
                              pvars = {'input_file_id':input_file_id}, 
                              timeout = 86400, # seconds
-                             immediate = True)
-                     
+                             immediate = True)                     
     # everything should now be in db
     clear_session_vars()
 

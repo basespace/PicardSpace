@@ -32,24 +32,11 @@ if os.path.isfile(settings_path):
         sys.exit(-1)
     current.genomes_path = config.get('PicardSpaceSettings', 'genomes_path')
     current.scratch_path = config.get('PicardSpaceSettings', 'scratch_path')
-    current.picard_path = config.get('PicardSpaceSettings', 'picard_path')
-    current.aws_region_name = config.get('PicardSpaceSettings', 'aws_region_name')
-    current.aws_analysis_image_id = config.get('PicardSpaceSettings', 'aws_analysis_image_id')
-    current.aws_analysis_key_name = config.get('PicardSpaceSettings', 'aws_analysis_key_name')
-    current.aws_analysis_instance_type = config.get('PicardSpaceSettings', 'aws_analysis_instance_type')
-    # security groups should be a list
-    current.aws_analysis_security_group = config.get('PicardSpaceSettings', 'aws_analysis_security_group')
-    current.aws_analysis_availability_zone = config.get('PicardSpaceSettings', 'aws_analysis_availability_zone')
+    current.picard_path = config.get('PicardSpaceSettings', 'picard_path')    
 else:
     current.genomes_path = os.path.join(request.folder, 'private', 'genomes')
     current.scratch_path = os.path.join(request.folder, 'private', 'downloads')
-    current.picard_path = os.path.join(request.folder, 'private', 'picard-tools-1.92')
-    current.aws_region_name = 'unknown'
-    current.aws_analysis_image_id = 'unknown'
-    current.aws_analysis_key_name = 'unknown'
-    current.aws_analysis_instance_type = 'unknown'    
-    current.aws_analysis_security_group = 'unknown'
-    current.aws_analysis_availability_zone = 'unknown'
+    current.picard_path = os.path.join(request.folder, 'private', 'picard-tools-1.92')    
     
 # instantiate web2py Scheduler
 scheduler = Scheduler(db, heartbeat=1) # override heartbeat to check for tasks every 1 sec (instead of 3 secs)
@@ -108,6 +95,16 @@ auth.settings.expiration = 3600  # seconds
 # define global vars
 current.debug_ps = False
 current.AWS_on_demand = False
+
+db.define_table('aws_data',
+    Field('region_name'),    
+    Field('analysis_image_id'),
+    Field('analysis_key_name'),
+    Field('analysis_instance_type'),
+    Field('analysis_security_group'),
+    Field('analysis_availability_zone'))
+
+
 current.product_names = {'AlignmentQC':'AlignmentQC'}      
 
 # file extensions for output files; the first extension in each list is used for newly created files
