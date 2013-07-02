@@ -113,7 +113,7 @@ class AnalysisInputFile(File):
         Download file contents from BaseSpace and queue the file for analysis
         """    
         db = current.db  
-        
+                
         # get input file and output app result info from database        
         ar_row = db(db.output_app_result.input_file_id==self.bs_file_id).select().first()
         ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
@@ -298,6 +298,16 @@ class AppResult(object):
             app_ssn = app_result.AppSession            
             app_ssn.setStatus(bs_api, bs_ssn_status, message[:128])                    
 
+
+    def abort_and_refund(self, message):
+        """
+        Set the app session status to aborted (locally and in BaseSpace) and refund a purchase if made
+        """
+        self.update_status('aborted', message, 'aborted')        
+        purch = Purchase(self.app_session_id)
+        purch.create_refund(message)
+        self.update_status('aborted', "[Purchase Refunded] " + message)
+        
         
     def _run_picard(self, input_file):    
         """
@@ -583,7 +593,7 @@ class ProductPurchase(object):
         self.amount = None
         self.prod_quantity = None
         self.free_trial = False
-
+                        
 
     def calc_quantity(self, file_num, user_id, live_purchase):
         """
@@ -618,6 +628,61 @@ class ProductPurchase(object):
         else:
             raise UnrecognizedProductException(self.prod_name)
         
+        
+class Purchase(object):
+    """
+    A Purchase that was made in BaseSpace
+    """        
+    def __init__(self, app_session_id):        
+        """        
+        Initialize a Purchase object from an App Session Id
+        """               
+        db = current.db
+        p_row = db(db.purchase.app_session_id==app_session_id).select().first()     
+        self.purchase_num = p_row.purchase_num            
+        self.app_session_id = p_row.app_session_id
+        self.date_created = p_row.date_created
+        self.amount = p_row.amount
+        self.amount_of_tax = p_row.amount_of_tax
+        self.amount_total = p_row.amount_total
+        self.status = p_row.status
+        self.refund_status = p_row.refund_status
+        self.refund_comment = p_row.refund_comment
+        self.refund_secret = p_row.refund_secret
+        self.access_token = p_row.access_token
+        self.invoice_number = p_row.invoice_number
+
+
+    def create_refund(self, message):
+        """
+        Create a refund for this purchase
+        """
+        db = current.db
+        app = db(db.app_data.id > 0).select().first()
+        ssn_row = db(db.app_session.id==self.app_session_id).select().first()
+        user_row = db(db.auth_user.id==ssn_row.user_id).select().first()                                    
+
+        if float(self.amount_total) > 0:
+            store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)           
+            if self.refund_status == 'NOTREFUNDED':
+                comment = 'Automatic refund was triggered by a PicardSpace error'
+                store_api.refundPurchase(self.purchase_num, self.refund_secret, 
+                                         comment=comment)
+                # set local refund status to 'COMPLETED' and update ssn status msg
+                #pr_row.update_record(refund_status='COMPLETED', comment=comment)
+                self.set_refund_status('COMPLETED', comment)
+                ssn_row.update_record(message="[Purchase Refunded] " + message)            
+                db.commit()  
+    
+    
+    def set_refund_status(self, status, comment):    
+        """
+        Set refund status in local db
+        """
+        db = current.db
+        pr_row = db(db.purchase.app_session_id==self.app_session_id).select().first()
+        pr_row.update_record(refund_status=status, comment=comment)
+
 
 def readable_bytes(size,precision=2):
     """
@@ -661,50 +726,22 @@ def get_access_token_util(auth_code):
 
 def analyze_bs_file(input_file_id):
     """
-    Downloads file from BaseSpace -- called from scheduler worker
+    Downloads and analyzes file from BaseSpace -- called from Scheduler worker
     """        
     db = current.db
-
     # refresh database connection -- needed for mysql RDS
     db.commit()
 
-    # get queued file from db
     f_row = db(db.input_file.id==input_file_id).select().first()
     ar_row = db(db.output_app_result.input_file_id==f_row.id).select().first()
-    ssn_row = db(db.app_session.id==ar_row.app_session_id).select().first()
-                                                                         
-    # download the file from BaseSpace and queue analysis
+                                                                             
     als_file = AnalysisInputFile.init_from_db(f_row)
     try:
         als_file.download_and_start_analysis()
-    except Exception as e:            
-        # update AppSession status in db and BaseSpace
-        ssn_row.update_record(status='aborted', message=str(e))            
-        db.commit()
-        
-        app = db(db.app_data.id > 0).select().first()
-        user_row = db(db.auth_user.id==ssn_row.user_id).select().first()            
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, app.baseSpaceUrl, app.version, ssn_row.app_session_num, user_row.access_token)            
-        app_ssn = bs_api.getAppSessionById(ssn_row.app_session_num)
-        message = "error analyzing file from BaseSpace: {0}".format(str(e))            
-        app_ssn.setStatus(bs_api, 'aborted', message[:128])                    
-        print message # user won't see this
-        
-        # perform refund if user paid for analysis
-        pr_row = db(db.purchase.app_session_id==ssn_row.id).select().first()
-        if float(pr_row.amount_total) > 0:
-            store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)           
-            if pr_row.refund_status == 'NOTREFUNDED':
-                comment = 'Automatic refund was triggered by a PicardSpace error'
-                store_api.refundPurchase(pr_row.purchase_num, pr_row.refund_secret, 
-                                         comment=comment)
-                # set local refund status to 'COMPLETED' and update ssn status msg
-                pr_row.update_record(refund_status='COMPLETED', comment=comment)
-                ssn_row.update_record(message="[Purchase Refunded] " + str(e))            
-                db.commit()                                            
-        # raise exception so scheduler will mark job as failed
-        # note if not using scheduler (manual debug) this shows exception in to browser
-        raise
-    # sanity commit to db for web2py Scheduler
-    db.commit()
+    except Exception as e:        
+        app_result = AppResult.init_from_db(ar_row)
+        app_result.abort_and_refund("error analyzing file: {0}".format(str(e)))        
+        raise # scheduler will mark job as failed; manual step-through shows Exception in browser
+    db.commit() # sanity commit for web2py Scheduler
+
 

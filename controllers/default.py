@@ -4,6 +4,7 @@ import re
 import shutil
 from datetime import datetime
 import boto.ec2
+from boto.exception import EC2ResponseError
 from gluon import HTTP
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
@@ -757,7 +758,7 @@ def start_analysis():
     db.commit()                    
                                                             
     # add new output AppResult to db            
-    db.output_app_result.insert(
+    output_app_result_id = db.output_app_result.insert(
         app_session_id=app_ssn_row.id,
         project_num=wb_proj_num,
         app_result_name= ar_name,
@@ -765,6 +766,7 @@ def start_analysis():
         sample_num=sample_num,        
         input_file_id=input_file_id)             
     db.commit()
+    output_ar_row = db(db.output_app_result.id==output_app_result_id).select().first()
     
     # begin download and analysis, update session status 
     if (current.debug_ps):
@@ -774,20 +776,30 @@ def start_analysis():
     elif (current.AWS_on_demand):
         app_ssn_row.update_record(status='analysis instance launching', message='Your analysis will begin within the next few minutes')
         db.commit()
-        conn = boto.ec2.connect_to_region(current.aws_region_name)            
+        try:
+            conn = boto.ec2.connect_to_region(current.aws_region_name)
+        except Exception as e:                        
+            app_result = AppResult.init_from_db(output_ar_row)
+            app_result.abort_and_refund("error connection to AWS region")            
         user_data_script = ["#!/bin/sh",
             "exec > /home/www-data/web2py/applications/PicardSpace/private/user_data.log 2>&1",
             "set -x # turn on debug trace mode",
             "bash /home/www-data/web2py/applications/PicardSpace/private/init_instance.bash " + str(input_file_id),            
             "shutdown -h now"]            
-        reservation = conn.run_instances(current.aws_analysis_image_id, 
-            key_name=current.aws_analysis_key_name, 
-            instance_type=current.aws_analysis_instance_type, 
-            security_groups=[current.aws_analysis_security_group], 
-            placement=current.aws_analysis_availability_zone, 
-            user_data='\n'.join(user_data_script), 
-            instance_initiated_shutdown_behavior='terminate')
-        # TODO handle error in reservation        
+        try:
+            reservation = conn.run_instances(current.aws_analysis_image_id, 
+                key_name=current.aws_analysis_key_name, 
+                instance_type=current.aws_analysis_instance_type, 
+                security_groups=[current.aws_analysis_security_group], 
+                placement=current.aws_analysis_availability_zone, 
+                user_data='\n'.join(user_data_script), 
+                instance_initiated_shutdown_behavior='terminate')
+        except EC2ResponseError as e:            
+            app_result = AppResult.init_from_db(output_ar_row)
+            app_result.abort_and_refund("error launching analysis instance: {0}".format(str(e.reason)))        
+        except Exception as e:
+            app_result = AppResult.init_from_db(output_ar_row)
+            app_result.abort_and_refund("error launching analysis instance")            
     else:
         app_ssn_row.update_record(status='analysis queued', message='')
         db.commit()
