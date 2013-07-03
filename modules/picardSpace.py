@@ -4,7 +4,6 @@ import os.path
 from subprocess import call
 from datetime import datetime
 import shutil
-import re
 from gluon import *
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
@@ -13,6 +12,12 @@ from BaseSpacePy.api.BillingAPI import BillingAPI
 class UnrecognizedProductException(Exception):
     def __init__(self, value):
         self.parameter = 'The following product name was not recognized: ' + str(value)
+    def __str__(self):
+        return repr(self.parameter)
+
+class PicardAnalysisFailedException(Exception):
+    def __init__(self, value):        
+        self.parameter = 'Picard analysis failed: ' + str(value)
     def __str__(self):
         return repr(self.parameter)
 
@@ -228,12 +233,11 @@ class AppResult(object):
             f_row.update_record(local_path="")
         db.commit()
 
-        # update session status
-        status = 'complete'
-        message = ''
-        if not analysis_success:                    
-            status = 'aborted'        
-        self.update_status(status, message, status)
+        # update session status        
+        if analysis_success:
+            self.update_status('complete', message, 'complete')
+        else:
+            raise PicardAnalysisFailedException('see Log for troubleshooting')                                            
 
 
     def writeback_timing(self, time_download, time_analysis, time_writeback):
@@ -305,8 +309,8 @@ class AppResult(object):
         """
         self.update_status('aborted', message, 'aborted')        
         purch = Purchase(self.app_session_id)
-        purch.create_refund(message)
-        self.update_status('aborted', "[Purchase Refunded] " + message)
+        if purch.create_refund():
+            self.update_status('aborted', "[Purchase Refunded] " + message)
         
         
     def _run_picard(self, input_file):    
@@ -653,9 +657,10 @@ class Purchase(object):
         self.invoice_number = p_row.invoice_number
 
 
-    def create_refund(self, message):
+    def create_refund(self):
         """
-        Create a refund for this purchase
+        Create a refund for this purchase if total billed was more than 0 iCredits
+        Return true if refund was made, otherwise False
         """
         db = current.db
         app = db(db.app_data.id > 0).select().first()
@@ -667,12 +672,10 @@ class Purchase(object):
             if self.refund_status == 'NOTREFUNDED':
                 comment = 'Automatic refund was triggered by a PicardSpace error'
                 store_api.refundPurchase(self.purchase_num, self.refund_secret, 
-                                         comment=comment)
-                # set local refund status to 'COMPLETED' and update ssn status msg
-                #pr_row.update_record(refund_status='COMPLETED', comment=comment)
-                self.set_refund_status('COMPLETED', comment)
-                ssn_row.update_record(message="[Purchase Refunded] " + message)            
-                db.commit()  
+                                         comment=comment)                
+                self.set_refund_status('COMPLETED', comment)                
+                return True
+        return False
     
     
     def set_refund_status(self, status, comment):    
@@ -682,6 +685,7 @@ class Purchase(object):
         db = current.db
         pr_row = db(db.purchase.app_session_id==self.app_session_id).select().first()
         pr_row.update_record(refund_status=status, comment=comment)
+        db.commit()
 
 
 def readable_bytes(size,precision=2):
@@ -740,7 +744,7 @@ def analyze_bs_file(input_file_id):
         als_file.download_and_start_analysis()
     except Exception as e:        
         app_result = AppResult.init_from_db(ar_row)
-        app_result.abort_and_refund("error analyzing file: {0}".format(str(e)))        
+        app_result.abort_and_refund("Error: {0}".format(str(e)))        
         raise # scheduler will mark job as failed; manual step-through shows Exception in browser
     db.commit() # sanity commit for web2py Scheduler
 
