@@ -39,18 +39,25 @@ The instructions are for use with Ubuntu or Mac OSX.
 
         sudo apt-get --yes install default-jre
 
-6. Install web2py. If you're on Mac OSX, don't download the pre-built Mac application. On Ubuntu you may also need to install python-tk.
+6. Install or upgrade boto to v2.5.1 or higher.
+
+        sudo pip install --upgrade boto
+        (OR)
+        sudo pip install boto
+        (on Mac, may not need 'sudo' above) 
+
+7. Install web2py. If you're on Mac OSX, don't download the pre-built Mac application. On Ubuntu you may also need to install python-tk.
 
         wget http://www.web2py.com/examples/static/web2py_src.zip
         unzip web2py_src.zip
         sudo apt-get install python-tk
 
-7. Add PicardSpace to the web2py applications.
+8. Add PicardSpace to the web2py applications.
 
         cd web2py/applications
         git clone https://github.com/basespace/PicardSpace.git
 
-8. Download genomes (this may take awhile).
+9. Download genomes (this may take awhile).
 
         cd PicardSpace/private
         mkdir genomes; cd genomes
@@ -62,16 +69,16 @@ The instructions are for use with Ubuntu or Mac OSX.
         wget ftp://igenome:G3nom3s4u@ussd-ftp.illumina.com/Bacillus_cereus_ATCC_10987/NCBI/2004-02-13/Bacillus_cereus_ATCC_10987_NCBI_2004-02-13.tar.gz
         tar -zvxf *.tar.gz
 
-9. Start web2py (and the web2py Scheduler), first navigating to the main 'web2py' directory. A web browser should launch with address localhost:8000.
+10. Start web2py (and the web2py Scheduler), first navigating to the main 'web2py' directory. A web browser should launch with address localhost:8000.
 
         cd ../../..
         python web2py.py -K PicardSpace -X
 
-10. Register your new PicardSpace app on the BaseSpace developer portal (developer.basespace.illumina.com). Configure your app with the following: for 'App Launch Location' choose 'Projects', and for 'Home Page' enter 'http://localhost:8000/PicardSpace'.
+11. Register your new PicardSpace app on the BaseSpace developer portal (developer.basespace.illumina.com). Configure your app with the following: for 'App Launch Location' choose 'Projects', and for 'Home Page' enter 'http://localhost:8000/PicardSpace'.
 
-11. Add a product to your product catalog in the BaseSpace dev portal (you may need to contact BaseSpace to get permission to add pricing to your app). Under the pricing tab, add a new consumable product named 'AlignmentQC' with a price of 2 iCredits (or whatever you wish). You'll need the new product Id in the next step.
+12. Add a product to your product catalog in the BaseSpace dev portal (you may need to contact BaseSpace to get permission to add pricing to your app). Under the pricing tab, add a new consumable product named 'AlignmentQC' with a price of 2 iCredits (or whatever you wish). You'll need the new product Id in the next step.
 
-12. Set app data and product info in the local database. Use the web2py admin panel (localhost:8000/PicardSpace/appadmin/index) to edit your local database. For table 'app_data', add your client_id, client_secret, and redirect_uri from the dev portal Details tab. For table 'product', add the product info you just added in the dev portal, with product.name=AlignmentQC, product.num=the id from the pricing tab in the dev portal, and product.price=your price.
+13. Set app data and product info in the local database. Use the web2py admin panel (localhost:8000/PicardSpace/appadmin/index) to edit your local database. For table 'app_data', add your client_id, client_secret, and redirect_uri from the dev portal Details tab. For table 'product', add the product info you just added in the dev portal, with product.name=AlignmentQC, product.num=the id from the pricing tab in the dev portal, and product.price=your price.
 
 Now launch your new app in BaseSpace with any Project that contains an AppResult with a small BAM file.
 
