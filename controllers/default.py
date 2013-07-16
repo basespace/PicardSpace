@@ -195,7 +195,9 @@ def index():
 @auth.requires_login()
 def user_now_logged_in():
     """
-    Just determined that the user is logged into picardSpace; if a project context was provided, have user choose inputs, otherwise view results
+    Just determined that the user is logged into picardSpace; if a project context was provided, have user choose inputs, otherwise view results.
+    If the user owns the launch project, request write access (so no oauth dialogs after billing).
+    If not, wait until after billing to create writeback project and request write access to it.
     """
     # determine if the user pre-selected a sample/app_result/project to analyze
     if (not session.app_session_num):
@@ -203,40 +205,33 @@ def user_now_logged_in():
     else:            
         # an app session num was provided, update app session with user info
         ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
-        ssn_row.update_record(user_id=auth.user_id)                                                                                
+        ssn_row.update_record(user_id=auth.user_id)
+        
         # start oauth, with permission to:
         # 1. Read (and Browse) the launch Project 
         # 2. Create new Projects, if needed, for writeback
         # (using Read Project instead of Browse due to bug in Browsing File metadata)
         # (using Browse Global to browse Samples from input AppResult that are in different Projects)
-        scope = 'create projects, browse global, read project %s' % (str(ssn_row.project_num))        
-        session.return_url = URL('request_proj_write_if_owned')
-        redirect(URL('get_auth_code', vars=dict(scope=scope)))
-
-
-@auth.requires_login()
-def request_proj_write_if_owned():
-    """
-    If the user owns the launch project, request write access (so no oauth dialogs after billing)
-    If not, wait until after billing to create writeback project and request write access to it
-    """                        
-    # determine if user own's launch project
-    ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()                   
-    user_row = db(db.auth_user.id==auth.user_id).select().first()                    
-    app = db(db.app_data.id > 0).select().first()
-    try:
-        bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
+        
+        # determine if user owns launch project
+        user_row = db(db.auth_user.id==auth.user_id).select().first()                    
+        app = db(db.app_data.id > 0).select().first()
+        try:
+            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
                               app.baseSpaceUrl, app.version, 
                               ssn_row.app_session_num, user_row.access_token)
-        launch_project = bs_api.getProjectById(ssn_row.project_num)
-    except Exception as e:
-        # TODO add view for errors
-        return dict(err_msg=str(e))                    
-    if user_row.username == launch_project.UserOwnedBy.Id:                
+            launch_project = bs_api.getProjectById(ssn_row.project_num)
+        except Exception as e:
+            # TODO add view for errors
+            return dict(err_msg=str(e))                        
+        scope = 'create projects, browse global'
+        if user_row.username == launch_project.UserOwnedBy.Id:
+            scope += ', write project %s' % (str(ssn_row.project_num))
+        else:
+            scope += ', read project %s' % (str(ssn_row.project_num))
+                                                                                                              
         session.return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
-        redirect(URL('get_auth_code', vars=dict(scope='write project %s' % (str(ssn_row.project_num)))))
-    else:
-        redirect(URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5)))
+        redirect(URL('get_auth_code', vars=dict(scope=scope)))
 
 
 @auth.requires_login()
