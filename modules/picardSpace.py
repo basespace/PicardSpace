@@ -614,7 +614,7 @@ class ProductPurchase(object):
             input_file = bs_api.getFileById(file_num)    
         
             # BAM files less than 100 MB are free
-            if input_file.Size < 100000000:
+            if input_file.Size < 100*(2**20):
                 self.prod_quantity = 0
             else:
                 # determine if free trial                
@@ -690,13 +690,13 @@ class Purchase(object):
 
 def readable_bytes(size,precision=2):
     """
-    Utility function to display number of bytes in a human-readable form
+    Utility function to display number of bytes in a human-readable form; BaseSpace uses the Base 2 definition of bytes
     """
     suffixes=['B','KB','MB','GB','TB']
     suffixIndex = 0
-    while size > 1000:
-        suffixIndex += 1 #increment the index of the suffix
-        size = size/1000.0 #apply the division
+    while size > 1024:
+        suffixIndex += 1 # increment the index of the suffix
+        size = size / 1024.0 # apply the division
     return "%.*f %s"%(precision,size,suffixes[suffixIndex])
     
 

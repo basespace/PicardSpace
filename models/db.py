@@ -314,9 +314,10 @@ class BaseSpaceAccount(object):
             session.in_login = False
             return
                         
-        # don't have auth code yet -- start login Oauth2, record login state for handle_redirect_uri()                                                                                    
+        # don't have auth code yet -- start login Oauth2, record login state for handle_redirect_uri()
+        # using browse global to get around oauth dialog bug (dialog shows every time for same user)                                                                                    
         session.in_login = True    
-        auth_request_url = get_auth_code_util(scope="")
+        auth_request_url = get_auth_code_util(scope="browse global")
         raise HTTP(
             307, 
             "You are not authenticated: you are being redirected to the <a href='" + auth_request_url + "'> authentication server</a>",

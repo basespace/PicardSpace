@@ -211,25 +211,8 @@ def user_now_logged_in():
         # 1. Read (and Browse) the launch Project 
         # 2. Create new Projects, if needed, for writeback
         # (using Read Project instead of Browse due to bug in Browsing File metadata)
-        # (using Browse Global to browse Samples from input AppResult that are in different Projects)
-        
-        # determine if user owns launch project
-        user_row = db(db.auth_user.id==auth.user_id).select().first()                    
-        app = db(db.app_data.id > 0).select().first()
-        try:
-            bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
-                              app.baseSpaceUrl, app.version, 
-                              ssn_row.app_session_num, user_row.access_token)
-            launch_project = bs_api.getProjectById(ssn_row.project_num)
-        except Exception as e:
-            # TODO add view for errors
-            return dict(err_msg=str(e))                        
-        scope = 'create projects, browse global'
-        if user_row.username == launch_project.UserOwnedBy.Id:
-            scope += ', write project %s' % (str(ssn_row.project_num))
-        else:
-            scope += ', read project %s' % (str(ssn_row.project_num))
-                                                                                                              
+        # (using Browse Global to browse Samples from input AppResult that are in different Projects)                
+        scope = 'create projects, browse global, read project %s' % (str(ssn_row.project_num))                                                                                                              
         session.return_url = URL('choose_analysis_app_result', vars=dict(ar_offset=0, ar_limit=5))
         redirect(URL('get_auth_code', vars=dict(scope=scope)))
 
@@ -363,7 +346,7 @@ def choose_analysis_file():
     for f in bs_files:          
         # don't allow analysis of files > 5 GB
         large_file = ""
-        if (f.Size > 5000000000):     
+        if (f.Size > 5*(2**30)):     
             large_file = "large_file"            
         file_info.append( { "file_name" : f.Name + " (" + readable_bytes(f.Size) + ")",
                             "file_num" : f.Id,
@@ -620,15 +603,16 @@ def create_writeback_project():
         try:
             wb_proj = bs_api.createProject('PicardSpace Results')    
         except Exception as e:
-            return dict(err_msg=str(e))        
-        # start oauth to get write project access (and read and browse), then start analysis
-        session.return_url = URL('start_analysis', vars=dict(
-            ar_name=ar_name, ar_num=ar_num, file_num=file_num, 
-            wb_proj_num=wb_proj.Id))
-        redirect(URL('get_auth_code', vars=dict(scope='write project ' + str(wb_proj.Id))))    
+            return dict(err_msg=str(e))
+        wb_proj_num = wb_proj.Id
     else:
-        redirect(URL('start_analysis', vars=dict(ar_name=ar_name,
-            ar_num=ar_num, file_num=file_num, wb_proj_num=ssn_row.project_num)))
+        wb_proj_num = ssn_row.project_num        
+    
+    # start oauth to get write access to writeback project, then start analysis
+    session.return_url = URL('start_analysis', vars=dict(
+        ar_name=ar_name, ar_num=ar_num, file_num=file_num, 
+        wb_proj_num=wb_proj_num))
+    redirect(URL('get_auth_code', vars=dict(scope='write project ' + str(wb_proj_num))))            
     
 
 @auth.requires_login()
