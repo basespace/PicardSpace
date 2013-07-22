@@ -3,7 +3,7 @@
 
 <p><small><a href="{{=ar_back}}"><i class="icon-arrow-left"></i> AppResults</a></small></p>
 
-  <h2>Metrics for <i>{{=sample_name}}</i></h2>
+  <h2>Metrics for <i>{{=sample_sampleid}}</i></h2>
   <div class="accordion" id="accordion_main">
   <div class="accordion-group">
     <div class="accordion-heading">
@@ -16,9 +16,7 @@
 
 	    <dl class="dl-horizontal">
 	        <dt>Sample</dt>
-	        <dd>{{=sample_name}}</dd>
-	        <!-- unsupported link to Sample until API supports this -->
-	        <!-- <dd><a href="https://basespace.illumina.com/sample/{{=sample_num}}/{{=sample_name}}">{{=sample_name}}</a></dd> -->
+	        <dd>{{=sample_sampleid}}</dd>	        
 	        <dt>Genome</dt>
 	        <dd>{{=genome}}</dd>        
 	    </dl>	    

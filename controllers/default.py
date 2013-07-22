@@ -893,7 +893,7 @@ def view_alignment_metrics():
     """
     Display multiple picard metrics graphs and alignment metrics
     """
-    ret = dict(aln_tbl="", hdr="", sample_name="", sample_num="", 
+    ret = dict(aln_tbl="", hdr="", sample_num="", sample_sampleid ="",
                input_file_name="", input_project_name="", 
                input_app_result_name="", output_app_result_name="", 
                output_project_name="", ar_back="",
@@ -933,7 +933,7 @@ def view_alignment_metrics():
     except Exception as e:
         ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
         return ret            
-    ret['sample_name'] = sample.Name 
+    ret['sample_sampleid'] = sample.SampleId
     ret['sample_num'] = sample.Id
     ret['input_file_name'] = input_file_row.file_name 
     ret['input_project_name'] = input_project.Name 
@@ -1102,7 +1102,7 @@ def view_qual_by_cycle_metrics():
     """
     Display picard's quality by cycle metrics
     """
-    ret = dict(back="", data_tbl="", hdr="", sample_name="", stderr="", err_msg="")
+    ret = dict(back="", data_tbl="", hdr="", stderr="", err_msg="")
     
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1164,7 +1164,7 @@ def view_qual_dist_metrics():
     """
     Display picard's quality distribution metrics
     """
-    ret = dict(back="", data_tbl="", hdr="", sample_name="", stderr="", err_msg="")
+    ret = dict(back="", data_tbl="", hdr="", stderr="", err_msg="")
     
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1226,7 +1226,7 @@ def view_gc_bias_metrics():
     """
     Display picard's gc-bias summary and histogram metrics
     """
-    ret = dict(back = "", sum_tbl="", hist_tbl="", hdr="", sample_name="", stderr="", err_msg="")        
+    ret = dict(back = "", sum_tbl="", hist_tbl="", hdr="", stderr="", err_msg="")        
     
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
@@ -1313,7 +1313,7 @@ def view_insert_size_metrics():
     """
     Display picard's insert size metrics
     """
-    ret = dict(back = "", hist_tbl="", data_tbl="", hdr="", sample_name="", stderr="", err_msg="")    
+    ret = dict(back = "", hist_tbl="", data_tbl="", hdr="", stderr="", err_msg="")    
 
     if 'app_session_id' not in request.vars:
         ret['err_msg'] = "We have a problem - expected app session id but didn't receive one." 
