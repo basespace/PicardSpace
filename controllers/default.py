@@ -770,7 +770,7 @@ def start_analysis():
             "bash /home/www-data/web2py/applications/PicardSpace/private/init_instance.bash " + str(input_file_id),            
             "shutdown -h now"]            
         try:
-            conn.run_instances(aws.analysis_image_id, 
+            reservation = conn.run_instances(aws.analysis_image_id, 
                 key_name = aws.analysis_key_name, 
                 instance_type = aws.analysis_instance_type, 
                 security_groups = [aws.analysis_security_group], 
@@ -780,7 +780,16 @@ def start_analysis():
         except EC2ResponseError as e:            
             output_ar.abort_and_refund("error launching analysis instance: {0}".format(str(e.reason)))        
         except Exception as e:            
-            output_ar.abort_and_refund("error launching analysis instance")            
+            output_ar.abort_and_refund("error launching analysis instance")
+        else:
+            # store new instance id in db for troubleshooting
+            if reservation.instances:
+                instance = reservation.instances[0]
+                db.aws_session.insert(app_session_id = app_ssn_row.id,
+                    instance_id = instance.id)
+                db.commit()
+            else:
+                output_ar.abort_and_refund("error launching the analysis instance")                    
     else:
         app_ssn_row.update_record(status='analysis queued', message='')
         db.commit()
