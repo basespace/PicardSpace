@@ -665,10 +665,9 @@ class Purchase(object):
         db = current.db
         app = db(db.app_data.id > 0).select().first()
         ssn_row = db(db.app_session.id==self.app_session_id).select().first()
-        user_row = db(db.auth_user.id==ssn_row.user_id).select().first()                                    
 
         if float(self.amount_total) > 0:
-            store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, user_row.access_token)           
+            store_api = BillingAPI(app.store_url, app.version, ssn_row.app_session_num, self.access_token)         
             if self.refund_status == 'NOTREFUNDED':
                 comment = 'Automatic refund was triggered by a PicardSpace error'
                 store_api.refundPurchase(self.purchase_num, self.refund_secret, 
