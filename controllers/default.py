@@ -87,6 +87,11 @@ def handle_redirect_uri():
             p_row = db(db.purchase.purchase_num==request.get_vars.purchaseid).select().first()
             if not p_row:
                 return dict(err_msg="Error: product id not recognized for purchase")
+
+            # check that purchase is for the current session's AppSession
+            ssn_row = db(db.app_session.app_session_num==session.app_session_num).select().first()
+            if (p_row.app_session_id != ssn_row.id):
+                return dict(err_msg="Error: the requested purchase is not for the current session")
             
             # get invoice number from BaseSpace now that this purchase is complete
             app = db(db.app_data.id > 0).select().first()
@@ -95,7 +100,7 @@ def handle_redirect_uri():
                 store_api = BillingAPI(app.store_url, app.version, 
                                        session.app_session_num, user_row.access_token)
                 purch = store_api.getPurchaseById(request.get_vars.purchaseid)                        
-            except:
+            except Exception as e:
                 return dict(err_msg=str(e))                                
             
             # check purchase status in BaseSpace
@@ -397,7 +402,7 @@ def confirm_analysis_inputs():
     # calculate how much to charge                
     try:        
         prod_purch = ProductPurchase('AlignmentQC')
-    except:
+    except Exception as e:
         ret['err_msg'] = "Error creating product purchase: " + str(e) 
         return ret
     try:
@@ -505,7 +510,7 @@ def start_billing():
     try:        
         # add tags to this purchase as an example
         prod_purch = ProductPurchase('AlignmentQC', ['tag1','tag2'])
-    except:
+    except Exception as e:
         return dict(err_msg="Error creating product purchase: " + str(e))
     try:
         prod_purch.calc_quantity(file_num, auth.user_id, True)        
