@@ -419,6 +419,7 @@ db.define_table('purchased_product',    # product(s) that were bought in a user 
 
 db.define_table('aws_session',
     Field('app_session_id', db.app_session),
+    Field('instance_type'),
     Field('instance_id'))               # when using AWS, the instance id of the analysis server for an app session
 
 db.define_table('free_trial',

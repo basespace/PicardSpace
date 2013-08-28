@@ -791,6 +791,7 @@ def start_analysis():
             if reservation.instances:
                 instance = reservation.instances[0]
                 db.aws_session.insert(app_session_id = app_ssn_row.id,
+                    instance_type = instance.instance_type,
                     instance_id = instance.id)
                 db.commit()
             else:

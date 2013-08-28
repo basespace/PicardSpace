@@ -243,6 +243,7 @@ class AppResult(object):
     def writeback_timing(self, time_download, time_analysis, time_writeback):
         """
         Write-back the provided timings (timedelta objects) to a file in BaseSpace
+        If on AWS, also write the instance type
         """
         db = current.db
         type_row = db(db.file_type.name=='timing').select().first()
@@ -257,6 +258,13 @@ class AppResult(object):
                 FT.write("Download time: " + str(time_download) + "\n")                
             FT.write("Analysis time: " + str(time_analysis) + "\n")
             FT.write("Write-back time: " + str(time_writeback) + "\n")
+            
+            # if on AWS, write the instance type
+            if (current.AWS_on_demand):
+                aws_ssn_row = db(db.aws_session.app_session_id==self.app_session_id).select().first()
+                if aws_ssn_row:
+                    FT.write("Instance type: " + aws_ssn_row.instance_type)
+
         f_time = File(app_result_id=self.app_result_id,
                       file_name=time_file,
                       local_path=time_path,
