@@ -420,46 +420,56 @@ def confirm_analysis_inputs():
         ret['confirm_msg'] = "Checkout..."
     
     # get sample num and name from AppResult, if present; only recognizing single sample per app result for now
+    sample = None
     if samples_ids:
         sample_num = samples_ids[0]
         try:
             sample = bs_api.getSampleById(sample_num)
         except Exception as e:
             ret['err_msg'] = "Error retrieving sample from BaseSpace: " + str(e)   
-            return ret                     
-        ret['sample_sampleid'] = sample.SampleId
-
-    # get paired-end status of sample
-    try:
-        if sample.IsPairedEnd:
-            ret['is_paired_end'] = 'Paired-end'
-        else:            
-            ret['is_paired_end'] = 'Single-end'
-    except AttributeError:
-        ret['is_paired_end'] = 'unknown'       
+            return ret
         
-    # get genome of sample, get id from href for now
-    try:
-        match = re.search('genomes/(\d+)$', sample.HrefGenome)
-    except AttributeError:
-        ret['genome_name'] = 'Unknown genome'
-    else:
-        if not match:
-            ret['genome_name'] = 'Unrecognized genome'
+        try:                     
+            ret['sample_sampleid'] = sample.SampleId
+        except AttributeError:
+            ret['sample_sampleid'] = 'unknown'
+
+        # get paired-end status of sample
+        try:
+            if sample.IsPairedEnd:
+                ret['is_paired_end'] = 'Paired-end'
+            else:            
+                ret['is_paired_end'] = 'Single-end'
+        except AttributeError:
+            ret['is_paired_end'] = 'unknown'       
+        
+        # get genome of sample, get id from href for now
+        try:
+            match = re.search('genomes/(\d+)$', sample.HrefGenome)
+        except AttributeError:
+            ret['genome_name'] = 'Unknown genome'
         else:
-            genome_num = match.group(1)            
-            # look up genome in local db; if absent, get display name from BaseSpace
-            gen_row = db(db.genome.genome_num==genome_num).select().first()                    
-            if gen_row:
-                ret['genome_name'] = gen_row.display_name
-                ret['known_genome'] = True
+            if not match:
+                ret['genome_name'] = 'Unrecognized genome'
             else:
-                try:
-                    genome = bs_api.getGenomeById(genome_num)
-                except Exception as e:
-                    ret['err_msg'] = "Error retrieving genome from BaseSpace: " + str(e)   
-                    return ret            
-                ret['genome_name'] = "Unsupported genome: " + genome.DisplayName
+                genome_num = match.group(1)            
+                # look up genome in local db; if absent, get display name from BaseSpace
+                gen_row = db(db.genome.genome_num==genome_num).select().first()                    
+                if gen_row:
+                    ret['genome_name'] = gen_row.display_name
+                    ret['known_genome'] = True
+                else:
+                    try:
+                        genome = bs_api.getGenomeById(genome_num)
+                    except Exception as e:
+                        ret['err_msg'] = "Error retrieving genome from BaseSpace: " + str(e)   
+                        return ret            
+                    ret['genome_name'] = "Unsupported genome: " + genome.DisplayName
+    # no sample relationship to BAM
+    else:
+        ret['sample_sampleid'] = 'unknown'
+        ret['is_paired_end'] = 'unknown'
+        ret['genome_name'] = 'unknown'
 
     # determine if user owns launch project, if not use 'PicardSpace Results' - won't create new project until after user confirms analysis
     if user_row.username == launch_project.UserOwnedBy.Id:
@@ -675,9 +685,11 @@ def start_analysis():
     except Exception as e:
         return dict(err_msg=str(e))
     
-    # get Samples referenced from AppResult - only recognizing single sample per app result for now
+    # get Samples referenced from AppResult if available - only recognizing single sample per app result for now
     sample_num = None
     sample = None
+    is_paired_end = 'unknown'
+    genome_id = None
     if samples_ids:
         sample_num = samples_ids[0]
         try:
@@ -685,30 +697,30 @@ def start_analysis():
         except Exception as e:
             return dict(err_msg=str(e))
     
-    # get pair-end status
-    try:
-        if sample.IsPairedEnd:
-            is_paired_end = 'paired'
-        else:            
-            is_paired_end = 'single'
-    except AttributeError:
-        is_paired_end = 'unknown'    
+        # get pair-end status
+        try:
+            if sample.IsPairedEnd:
+                is_paired_end = 'paired'
+            else:            
+                is_paired_end = 'single'
+        except AttributeError:
+            is_paired_end = 'unknown'    
 
-    # get genome of sample, get id from href for now
-    try:    
-        match = re.search('genomes/(\d+)$', sample.HrefGenome)
-    except AttributeError:
-        genome_id = None
-    else:
-        if not match:
-            genome_id = None        
+        # get genome of sample, get id from href for now
+        try:    
+            match = re.search('genomes/(\d+)$', sample.HrefGenome)
+        except AttributeError:
+            genome_id = None
         else:
-            genome_num = match.group(1)
-            gen_row = db(db.genome.genome_num==genome_num).select().first()                    
-            if gen_row:
-                genome_id = gen_row.id
+            if not match:
+                genome_id = None        
             else:
-                genome_id = None # null entry is unsupported or unknown genome 
+                genome_num = match.group(1)
+                gen_row = db(db.genome.genome_num==genome_num).select().first()                    
+                if gen_row:
+                    genome_id = gen_row.id
+                else:
+                    genome_id = None # null entry is unsupported or unknown genome 
                 
     # clean app result name - only allow alpha, numeric, spaces, and a few symbols
     ar_name = re.sub("[^ a-zA-Z0-9_.,()\[\]+-]", "", ar_name.strip())        
@@ -716,10 +728,13 @@ def start_analysis():
         ar_name = 'PicardSpace Result'
             
     # add new AppResult to BaseSpace
+    samples = []
+    if sample:
+        samples = [sample]    
     try:
         wb_proj = bs_api.getProjectById(wb_proj_num)    
         input_file = bs_api.getFileById(file_num)
-        output_app_result = wb_proj.createAppResult(bs_api, ar_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=[ sample ] )
+        output_app_result = wb_proj.createAppResult(bs_api, ar_name, "PicardSpace AppResult", appSessionId=app_ssn_row.app_session_num, samples=samples )
     except Exception as e:
         return dict(err_msg=str(e))
     
@@ -908,7 +923,7 @@ def view_alignment_metrics():
     """
     Display multiple picard metrics graphs and alignment metrics
     """
-    ret = dict(aln_tbl="", hdr="", sample_num="", sample_sampleid ="",
+    ret = dict(aln_tbl="", hdr="", sample_sampleid ="",
                input_file_name="", input_project_name="", 
                input_app_result_name="", output_app_result_name="", 
                output_project_name="", ar_back="",
@@ -941,15 +956,24 @@ def view_alignment_metrics():
     try:
         bs_api = BaseSpaceAPI(app.client_id, app.client_secret, 
                               app.baseSpaceUrl, app.version, 
-                              ssn_row.app_session_num, user_row.access_token)        
-        sample = bs_api.getSampleById(output_ar_row.sample_num)        
+                              ssn_row.app_session_num, user_row.access_token)                    
         output_project = bs_api.getProjectById(output_ar_row.project_num)
         input_project = bs_api.getProjectById(input_ar_row.project_num)
     except Exception as e:
-        ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
+        ret['err_msg'] = "Error retrieving Project info from BaseSpace: " + str(e)
         return ret            
-    ret['sample_sampleid'] = sample.SampleId
-    ret['sample_num'] = sample.Id
+    
+    if output_ar_row.sample_num:
+        try:
+            sample = bs_api.getSampleById(output_ar_row.sample_num)
+            ret['sample_sampleid'] = sample.SampleId
+        except Exception as e:
+            ret['err_msg'] = "Error retrieving Sample info from BaseSpace: " + str(e)
+            return ret
+    # if sample relationship is missing, display BAM file name
+    else:
+        ret['sample_sampleid'] = input_file_row.file_name                
+        
     ret['input_file_name'] = input_file_row.file_name 
     ret['input_project_name'] = input_project.Name 
     ret['input_app_result_name'] = input_ar_row.app_result_name  
