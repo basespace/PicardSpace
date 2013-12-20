@@ -284,7 +284,10 @@ def choose_analysis_app_result():
         # build string of Sample names for display            
         samples_ids = []
         for s in samples:
-            samples_ids.append(s.SampleId)          
+            try:
+                samples_ids.append(s.SampleId)
+            except AttributeError as e:
+                pass                        
         ar_info.append( { "app_result_name" : ar.Name + " - " + ', '.join(samples_ids),    # + ", " + str(ar.DateCreated),
                           "app_result_num" : ar.Id } )                                                  
     ret['ar_info'] = ar_info
@@ -344,8 +347,10 @@ def choose_analysis_file():
     # build string of Sample ids for display            
     samples_ids = []
     for s in samples:
-        samples_ids.append(s.SampleId)                
-                
+        try:
+            samples_ids.append(s.SampleId)
+        except AttributeError:
+            pass                                
     # construct display name for each BAM file   
     file_info = []    
     for f in bs_files:          
@@ -968,8 +973,7 @@ def view_alignment_metrics():
             sample = bs_api.getSampleById(output_ar_row.sample_num)
             ret['sample_sampleid'] = sample.SampleId
         except Exception as e:
-            ret['err_msg'] = "Error retrieving Sample info from BaseSpace: " + str(e)
-            return ret
+            ret['sample_sampleid'] = 'unknown'                        
     # if sample relationship is missing, display BAM file name
     else:
         ret['sample_sampleid'] = input_file_row.file_name                
