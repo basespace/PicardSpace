@@ -8,6 +8,7 @@ from boto.exception import EC2ResponseError
 from gluon import HTTP
 from BaseSpacePy.api.BaseSpaceAPI import BaseSpaceAPI
 from BaseSpacePy.api.BillingAPI import BillingAPI
+from BaseSpacePy.model.QueryParameters import QueryParameters as qp
 from picardSpace import File, ProductPurchase, AppResult, readable_bytes, get_auth_code_util, get_access_token_util, analyze_bs_file
 
 # Auth notes:
@@ -259,7 +260,7 @@ def choose_analysis_app_result():
     # get App Results for current Project, limited by limit and offset for performance
     try:
         # app_result list is in condensed API form - no References, Genome -- get these below                    
-        app_results = proj.getAppResults(bs_api, myQp={'Limit':1024})
+        app_results = proj.getAppResults(bs_api, qp({'Limit':1024}))
     except Exception as e:
         ret['err_msg'] = "Error retrieving AppResults from BaseSpace: " + str(e)
         return ret
@@ -337,7 +338,7 @@ def choose_analysis_file():
                               app.baseSpaceUrl, app.version, 
                               session.app_session_num, user_row.access_token)
         app_result = bs_api.getAppResultById(ret['ar_num'])
-        bs_files = app_result.getFiles(bs_api, myQp={'Extensions':'bam', 'Limit':100})
+        bs_files = app_result.getFiles(bs_api, qp({'Extensions':'bam', 'Limit':100}))
     except Exception as e:
         ret['err_msg'] = "Error retrieving items from BaseSpace: " + str(e)
         return ret         
